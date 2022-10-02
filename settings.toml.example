@@ -1,0 +1,3 @@
+name = "username"
+oauth_token = "youreallylongtoken"
+channels = ["list", "of", "channels"]
