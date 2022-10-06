@@ -99,6 +99,9 @@ pub async fn main() {
                         *emote_count = 1;
                         *emote = msg.message_text;
                         println!("Single word {}", *emote);
+                        if "ayy" == emote {
+                            cl.say(channel, "lmao".to_owned()).await.unwrap();
+                        }
                     } else if *pyramid_building {
                         let num_of_matches = msg
                             .message_text
