@@ -77,11 +77,13 @@ pub async fn main() {
     let mut building_flags = HashMap::new();
     let mut emote_counts = HashMap::new();
     let mut emotes = HashMap::new();
+    let mut pyramid_count = HashMap::new();
 
     for channel_to_connect in &conf.channels {
         building_flags.insert(channel_to_connect.clone(), false);
         emote_counts.insert(channel_to_connect.clone(), 0usize);
         emotes.insert(channel_to_connect.clone(), "".to_owned());
+        pyramid_count.insert(channel_to_connect.clone(), HashMap::new());
     }
 
     let cl = client.clone();
@@ -98,6 +100,14 @@ pub async fn main() {
                         say_rate_limited(&cl, &lim,channel.clone(), "lmao").await;
                     }
 
+                    if msg.sender.name == "StreamElements" && msg.message_text.contains("pirámide") {
+                        let chat_count = pyramid_count.get_mut(channel.as_str()).unwrap();
+                        let as_vec = msg.message_text.split(" ").collect::<Vec<_>>();
+                        let name = as_vec[as_vec.len() - 2];
+                        let num = chat_count.entry(name.to_string()).or_insert(0u8);
+                        *num += 1;
+                        cl.say(channel.clone(), format!("{} lleva {} piramides", name, *num)).await.unwrap();
+                    }
 
                     if !msg.message_text.contains(" ") {
                         *pyramid_building = true;
