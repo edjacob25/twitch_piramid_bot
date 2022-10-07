@@ -94,14 +94,17 @@ pub async fn main() {
                     let emote_count = emote_counts.get_mut(channel.as_str()).unwrap();
                     let emote = emotes.get_mut(channel.as_str()).unwrap();
                     println!("(#{}) {}: {}", channel, msg.sender.name, msg.message_text);
+                    if msg.message_text.to_lowercase().contains("ayy") {
+                        say_rate_limited(&cl, &lim,channel.clone(), "lmao").await;
+                    }
+
+
                     if !msg.message_text.contains(" ") {
                         *pyramid_building = true;
                         *emote_count = 1;
                         *emote = msg.message_text;
                         println!("Single word {}", *emote);
-                        if "ayy" == emote {
-                            cl.say(channel, "lmao".to_owned()).await.unwrap();
-                        }
+
                     } else if *pyramid_building {
                         let num_of_matches = msg
                             .message_text
