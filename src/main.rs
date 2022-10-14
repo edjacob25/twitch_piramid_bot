@@ -149,6 +149,14 @@ pub async fn main() {
     }
 
     let cl = client.clone();
+    let channel_confs = conf.channels.iter().fold(HashMap::new(), |mut acc, c| {
+        *acc.entry(c.channel_name.clone()).or_default() = c
+            .permitted_actions
+            .iter()
+            .map(|c| c.clone())
+            .collect::<Vec<_>>();
+        acc
+    });
     let join_handle = tokio::spawn(async move {
         let lim = RateLimiter::keyed(Quota::per_second(NonZeroU32::new(1).unwrap()));
         let combo = Combo {
@@ -163,18 +171,28 @@ pub async fn main() {
                         msg.channel_login, msg.sender.name, msg.message_text
                     );
 
-                    do_ayy(&combo, &msg).await;
+                    let channel_conf = channel_confs.get(&msg.channel_login).unwrap();
 
-                    do_pyramid_counting(&combo, &msg, &mut pyramid_count).await;
-
-                    do_pyramid_interference(
-                        &combo,
-                        &msg,
-                        &mut building_flags,
-                        &mut emote_counts,
-                        &mut emotes,
-                    )
-                    .await;
+                    for action in channel_conf {
+                        match action {
+                            ChatAction::Ayy => {
+                                do_ayy(&combo, &msg).await;
+                            }
+                            ChatAction::PyramidCounting => {
+                                do_pyramid_counting(&combo, &msg, &mut pyramid_count).await;
+                            }
+                            ChatAction::PyramidInterference => {
+                                do_pyramid_interference(
+                                    &combo,
+                                    &msg,
+                                    &mut building_flags,
+                                    &mut emote_counts,
+                                    &mut emotes,
+                                )
+                                .await;
+                            }
+                        }
+                    }
                 }
                 _ => {
                     println!("{:?}", message)
