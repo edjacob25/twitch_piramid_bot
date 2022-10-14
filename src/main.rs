@@ -6,6 +6,7 @@ use governor::state::keyed::DefaultKeyedStateStore;
 use governor::{Quota, RateLimiter};
 use std::collections::HashMap;
 use std::num::NonZeroU32;
+use std::time::Duration;
 use twitch_irc::login::StaticLoginCredentials;
 use twitch_irc::message::ServerMessage;
 use twitch_irc::ClientConfig;
@@ -158,7 +159,12 @@ pub async fn main() {
         acc
     });
     let join_handle = tokio::spawn(async move {
-        let lim = RateLimiter::keyed(Quota::per_second(NonZeroU32::new(1).unwrap()));
+        let lim = RateLimiter::keyed(
+            Quota::with_period(Duration::from_secs_f32(1.5))
+                .unwrap()
+                .allow_burst(NonZeroU32::new(20).unwrap()),
+        );
+
         let combo = Combo {
             client: cl,
             limiter: lim,
