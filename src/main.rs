@@ -1,8 +1,9 @@
+use crate::chat_action::ChatAction;
+use crate::pyramid_action::PyramidAction;
 use config::Config;
 use governor::clock::DefaultClock;
 use governor::state::keyed::DefaultKeyedStateStore;
 use governor::{Quota, RateLimiter};
-use pyramid_action::PyramidAction;
 use std::collections::HashMap;
 use std::num::NonZeroU32;
 use twitch_irc::login::StaticLoginCredentials;

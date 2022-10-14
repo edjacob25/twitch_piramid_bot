@@ -1,3 +1,7 @@
 name = "username"
 oauth_token = "youreallylongtoken"
-channels = ["list", "of", "channels"]
+channels = [
+    { channel_name = "list", permitted_actions = ["Ayy"] },
+    { channel_name = "of", permitted_actions = ["Ayy", "PyramidInterference"] },
+    { channel_name = "channels", permitted_actions = ["Ayy", "PyramidInterference", "PyramidCounting"] },
+]

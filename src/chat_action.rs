@@ -1,10 +1,11 @@
-use std::str::FromStr;
 use serde::Deserialize;
+use std::str::FromStr;
 
-#[derive(Debug, Deserialize, Eq, PartialEq, Hash)]
+#[derive(Debug, Deserialize, Eq, PartialEq, Hash, Clone)]
 pub enum ChatAction {
-    DoPyramid,
     Ayy,
+    PyramidCounting,
+    PyramidInterference,
 }
 
 impl FromStr for ChatAction {
@@ -12,9 +13,11 @@ impl FromStr for ChatAction {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "DoPyramid" => Ok(ChatAction::DoPyramid),
             "Ayy" => Ok(ChatAction::Ayy),
-            _ => Err(())
+            "PyramidCounting" => Ok(ChatAction::PyramidCounting),
+            "PyramidInterference" => Ok(ChatAction::PyramidInterference),
+
+            _ => Err(()),
         }
     }
 }
