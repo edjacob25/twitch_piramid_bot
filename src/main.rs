@@ -1,8 +1,8 @@
-use pyramid_action::PyramidAction;
 use config::Config;
 use governor::clock::DefaultClock;
 use governor::state::keyed::DefaultKeyedStateStore;
 use governor::{Quota, RateLimiter};
+use pyramid_action::PyramidAction;
 use std::collections::HashMap;
 use std::num::NonZeroU32;
 use twitch_irc::login::StaticLoginCredentials;
@@ -11,38 +11,108 @@ use twitch_irc::ClientConfig;
 use twitch_irc::SecureTCPTransport;
 use twitch_irc::TwitchIRCClient;
 
+mod bot_config;
 mod chat_action;
 mod pyramid_action;
-mod bot_config;
 
 type Client = TwitchIRCClient<SecureTCPTransport, StaticLoginCredentials>;
 type Limiter = RateLimiter<String, DefaultKeyedStateStore<String>, DefaultClock>;
 
-async fn do_something(client: &Client, channel: &str, emote: &str) {
-    let action: PyramidAction = rand::random();
-    match action {
-        PyramidAction::Steal => {
-            client
-                .say(channel.to_string(), emote.to_string())
-                .await
-                .unwrap();
-        }
-        PyramidAction::Destroy => {
-            client
-                .say(channel.to_string(), "No".to_owned())
-                .await
-                .unwrap();
-        }
-        _ => println!("Do nothing"),
-    }
+struct Combo {
+    client: Client,
+    limiter: Limiter,
 }
 
-async fn say_rate_limited(client: &Client, limiter: &Limiter, channel: String, msg: &str) {
-    match limiter.check_key(&channel) {
-        Ok(_) => client.say(channel, msg.to_string()).await.unwrap(),
+async fn say_rate_limited(combo: &Combo, channel: String, msg: &str) {
+    match combo.limiter.check_key(&channel) {
+        Ok(_) => combo.client.say(channel, msg.to_string()).await.unwrap(),
         Err(_) => {
             println!("Rate limited")
         }
+    }
+}
+
+async fn do_ayy(combo: &Combo, msg: &twitch_irc::message::PrivmsgMessage) {
+    if msg.message_text.to_lowercase().contains("ayy") {
+        say_rate_limited(combo, msg.channel_login.clone(), "lmao").await;
+    }
+}
+
+async fn do_pyramid_counting(
+    combo: &Combo,
+    msg: &twitch_irc::message::PrivmsgMessage,
+    pyramid_count: &mut HashMap<String, HashMap<String, u8>>,
+) {
+    if msg.sender.name == "StreamElements" && msg.message_text.contains("pirámide") {
+        let chat_count = pyramid_count.get_mut(msg.channel_login.as_str()).unwrap();
+        let as_vec = msg.message_text.split(" ").collect::<Vec<_>>();
+        let name = as_vec[as_vec.len() - 2];
+        let num = chat_count.entry(name.to_string()).or_insert(0u8);
+        *num += 1;
+        let message = format!("{} lleva {} piramides", name, *num);
+        say_rate_limited(combo, msg.channel_login.clone(), message.as_str()).await;
+    }
+}
+
+async fn do_pyramid_interference(
+    combo: &Combo,
+    msg: &twitch_irc::message::PrivmsgMessage,
+    building_flags: &mut HashMap<String, bool>,
+    emote_counts: &mut HashMap<String, usize>,
+    emotes: &mut HashMap<String, String>,
+) {
+    let channel = &msg.channel_login;
+    let pyramid_building = building_flags.get_mut(channel.as_str()).unwrap();
+    let emote_count = emote_counts.get_mut(channel.as_str()).unwrap();
+    let emote = emotes.get_mut(channel.as_str()).unwrap();
+
+    if !msg.message_text.contains(" ") {
+        *pyramid_building = true;
+        *emote_count = 1;
+        *emote = msg.message_text.clone();
+        println!("Single word {}", *emote);
+    } else if *pyramid_building {
+        let num_of_matches = msg
+            .message_text
+            .match_indices(emote.as_str())
+            .collect::<Vec<_>>()
+            .len();
+        let num_of_words = msg.message_text.split(" ").collect::<Vec<_>>().len();
+        if num_of_words != num_of_matches {
+            *pyramid_building = false;
+            return;
+        }
+        match num_of_matches {
+            i if i == *emote_count + 1 => {
+                println!("Pyramid growing");
+                *emote_count += 1;
+            }
+            i if i == *emote_count - 1 => {
+                println!("Pyramid getting smaller");
+                *emote_count -= 1;
+                if *emote_count == 2 {
+                    println!("Time to strike");
+                    do_pyramid_action(combo, channel.as_str(), &emote).await;
+                    *pyramid_building = false;
+                }
+            }
+            _ => *pyramid_building = false,
+        }
+    } else {
+        *pyramid_building = false;
+    }
+}
+
+async fn do_pyramid_action(combo: &Combo, channel: &str, emote: &str) {
+    let action: PyramidAction = rand::random();
+    match action {
+        PyramidAction::Steal => {
+            say_rate_limited(combo, channel.to_string(), emote).await;
+        }
+        PyramidAction::Destroy => {
+            say_rate_limited(combo, "No".to_string(), emote).await;
+        }
+        _ => println!("Do nothing"),
     }
 }
 
@@ -70,78 +140,40 @@ pub async fn main() {
     let mut pyramid_count = HashMap::new();
 
     for channel_to_connect in &conf.channels {
-        building_flags.insert(channel_to_connect.clone(), false);
-        emote_counts.insert(channel_to_connect.clone(), 0usize);
-        emotes.insert(channel_to_connect.clone(), "".to_owned());
-        pyramid_count.insert(channel_to_connect.clone(), HashMap::new());
+        let channel_name = &channel_to_connect.channel_name;
+        building_flags.insert(channel_name.clone(), false);
+        emote_counts.insert(channel_name.clone(), 0usize);
+        emotes.insert(channel_name.clone(), "".to_owned());
+        pyramid_count.insert(channel_name.clone(), HashMap::new());
     }
 
     let cl = client.clone();
     let join_handle = tokio::spawn(async move {
         let lim = RateLimiter::keyed(Quota::per_second(NonZeroU32::new(1).unwrap()));
-
+        let combo = Combo {
+            client: cl,
+            limiter: lim,
+        };
         while let Some(message) = incoming_messages.recv().await {
             match message {
                 ServerMessage::Privmsg(msg) => {
-                    let channel = msg.channel_login;
-                    let pyramid_building = building_flags.get_mut(channel.as_str()).unwrap();
-                    let emote_count = emote_counts.get_mut(channel.as_str()).unwrap();
-                    let emote = emotes.get_mut(channel.as_str()).unwrap();
-                    println!("(#{}) {}: {}", channel, msg.sender.name, msg.message_text);
-                    if msg.message_text.to_lowercase().contains("ayy") {
-                        say_rate_limited(&cl, &lim, channel.clone(), "lmao").await;
-                    }
+                    println!(
+                        "(#{}) {}: {}",
+                        msg.channel_login, msg.sender.name, msg.message_text
+                    );
 
-                    if msg.sender.name == "StreamElements" && msg.message_text.contains("pirámide")
-                    {
-                        let chat_count = pyramid_count.get_mut(channel.as_str()).unwrap();
-                        let as_vec = msg.message_text.split(" ").collect::<Vec<_>>();
-                        let name = as_vec[as_vec.len() - 2];
-                        let num = chat_count.entry(name.to_string()).or_insert(0u8);
-                        *num += 1;
-                        cl.say(
-                            channel.clone(),
-                            format!("{} lleva {} piramides", name, *num),
-                        )
-                        .await
-                        .unwrap();
-                    }
+                    do_ayy(&combo, &msg).await;
 
-                    if !msg.message_text.contains(" ") {
-                        *pyramid_building = true;
-                        *emote_count = 1;
-                        *emote = msg.message_text;
-                        println!("Single word {}", *emote);
-                    } else if *pyramid_building {
-                        let num_of_matches = msg
-                            .message_text
-                            .match_indices(emote.as_str())
-                            .collect::<Vec<_>>()
-                            .len();
-                        let num_of_words = msg.message_text.split(" ").collect::<Vec<_>>().len();
-                        if num_of_words != num_of_matches {
-                            *pyramid_building = false;
-                            continue;
-                        }
-                        match num_of_matches {
-                            i if i == *emote_count + 1 => {
-                                println!("Pyramid growing");
-                                *emote_count += 1;
-                            }
-                            i if i == *emote_count - 1 => {
-                                println!("Pyramid getting smaller");
-                                *emote_count -= 1;
-                                if *emote_count == 2 {
-                                    println!("Time to strike");
-                                    do_something(&cl, channel.as_str(), &emote).await;
-                                    *pyramid_building = false;
-                                }
-                            }
-                            _ => *pyramid_building = false,
-                        }
-                    } else {
-                        *pyramid_building = false;
-                    }
+                    do_pyramid_counting(&combo, &msg, &mut pyramid_count).await;
+
+                    do_pyramid_interference(
+                        &combo,
+                        &msg,
+                        &mut building_flags,
+                        &mut emote_counts,
+                        &mut emotes,
+                    )
+                    .await;
                 }
                 _ => {
                     println!("{:?}", message)
@@ -151,7 +183,9 @@ pub async fn main() {
     });
 
     for channel_to_connect in &conf.channels {
-        client.join(channel_to_connect.clone()).unwrap();
+        client
+            .join(channel_to_connect.channel_name.clone())
+            .unwrap();
     }
 
     // keep the tokio executor alive.
