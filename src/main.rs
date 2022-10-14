@@ -4,7 +4,11 @@ use rand::{
     Rng,
 };
 use serde::Deserialize;
+use governor::clock::DefaultClock;
+use governor::state::keyed::DefaultKeyedStateStore;
+use governor::{Quota, RateLimiter};
 use std::collections::HashMap;
+use std::num::NonZeroU32;
 use twitch_irc::login::StaticLoginCredentials;
 use twitch_irc::message::ServerMessage;
 use twitch_irc::ClientConfig;
@@ -52,7 +56,16 @@ async fn do_something(
                 .await
                 .unwrap();
         }
-        _ => (),
+        _ => println!("Do nothing"),
+    }
+}
+
+async fn say_rate_limited(client: &Client, limiter: &Limiter, channel: String, msg: &str) {
+    match limiter.check_key(&channel) {
+        Ok(_) => client.say(channel, msg.to_string()).await.unwrap(),
+        Err(_) => {
+            println!("Rate limited")
+        }
     }
 }
 
@@ -88,6 +101,8 @@ pub async fn main() {
 
     let cl = client.clone();
     let join_handle = tokio::spawn(async move {
+        let lim = RateLimiter::keyed(Quota::per_second(NonZeroU32::new(1).unwrap()));
+
         while let Some(message) = incoming_messages.recv().await {
             match message {
                 ServerMessage::Privmsg(msg) => {
@@ -97,16 +112,22 @@ pub async fn main() {
                     let emote = emotes.get_mut(channel.as_str()).unwrap();
                     println!("(#{}) {}: {}", channel, msg.sender.name, msg.message_text);
                     if msg.message_text.to_lowercase().contains("ayy") {
-                        say_rate_limited(&cl, &lim,channel.clone(), "lmao").await;
+                        say_rate_limited(&cl, &lim, channel.clone(), "lmao").await;
                     }
 
-                    if msg.sender.name == "StreamElements" && msg.message_text.contains("pirámide") {
+                    if msg.sender.name == "StreamElements" && msg.message_text.contains("pirámide")
+                    {
                         let chat_count = pyramid_count.get_mut(channel.as_str()).unwrap();
                         let as_vec = msg.message_text.split(" ").collect::<Vec<_>>();
                         let name = as_vec[as_vec.len() - 2];
                         let num = chat_count.entry(name.to_string()).or_insert(0u8);
                         *num += 1;
-                        cl.say(channel.clone(), format!("{} lleva {} piramides", name, *num)).await.unwrap();
+                        cl.say(
+                            channel.clone(),
+                            format!("{} lleva {} piramides", name, *num),
+                        )
+                        .await
+                        .unwrap();
                     }
 
                     if !msg.message_text.contains(" ") {
@@ -114,7 +135,6 @@ pub async fn main() {
                         *emote_count = 1;
                         *emote = msg.message_text;
                         println!("Single word {}", *emote);
-
                     } else if *pyramid_building {
                         let num_of_matches = msg
                             .message_text
