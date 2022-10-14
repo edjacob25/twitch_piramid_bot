@@ -1,9 +1,5 @@
+use pyramid_action::PyramidAction;
 use config::Config;
-use rand::{
-    distributions::{Distribution, Standard},
-    Rng,
-};
-use serde::Deserialize;
 use governor::clock::DefaultClock;
 use governor::state::keyed::DefaultKeyedStateStore;
 use governor::{Quota, RateLimiter};
@@ -15,42 +11,23 @@ use twitch_irc::ClientConfig;
 use twitch_irc::SecureTCPTransport;
 use twitch_irc::TwitchIRCClient;
 
-#[derive(Debug, Deserialize)]
-struct BotConfig {
-    name: String,
-    oauth_token: String,
-    channels: Vec<String>,
-}
+mod chat_action;
+mod pyramid_action;
+mod bot_config;
 
-enum Action {
-    DoNothing,
-    Steal,
-    Destroy,
-}
-impl Distribution<Action> for Standard {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Action {
-        match rng.gen_range(0..=2) {
-            0 => Action::DoNothing,
-            1 => Action::Steal,
-            _ => Action::Destroy,
-        }
-    }
-}
+type Client = TwitchIRCClient<SecureTCPTransport, StaticLoginCredentials>;
+type Limiter = RateLimiter<String, DefaultKeyedStateStore<String>, DefaultClock>;
 
-async fn do_something(
-    client: &TwitchIRCClient<SecureTCPTransport, StaticLoginCredentials>,
-    channel: &str,
-    emote: &str,
-) {
-    let action: Action = rand::random();
+async fn do_something(client: &Client, channel: &str, emote: &str) {
+    let action: PyramidAction = rand::random();
     match action {
-        Action::Steal => {
+        PyramidAction::Steal => {
             client
                 .say(channel.to_string(), emote.to_string())
                 .await
                 .unwrap();
         }
-        Action::Destroy => {
+        PyramidAction::Destroy => {
             client
                 .say(channel.to_string(), "No".to_owned())
                 .await
@@ -77,7 +54,7 @@ pub async fn main() {
         .expect("Need the config");
 
     let conf = settings
-        .try_deserialize::<BotConfig>()
+        .try_deserialize::<bot_config::BotConfig>()
         .expect("Malformed config");
 
     let twitch_config = ClientConfig::new_simple(StaticLoginCredentials::new(
