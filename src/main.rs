@@ -25,9 +25,10 @@ struct Combo {
     limiter: Limiter,
 }
 
-async fn say_rate_limited(combo: &Combo, channel: String, msg: &str) {
+async fn say_rate_limited(combo: &Combo, channel: &str, msg: String) {
+    let channel = channel.to_string();
     match combo.limiter.check_key(&channel) {
-        Ok(_) => combo.client.say(channel, msg.to_string()).await.unwrap(),
+        Ok(_) => combo.client.say(channel, msg).await.unwrap(),
         Err(_) => {
             println!("Rate limited")
         }
@@ -36,7 +37,7 @@ async fn say_rate_limited(combo: &Combo, channel: String, msg: &str) {
 
 async fn do_ayy(combo: &Combo, msg: &twitch_irc::message::PrivmsgMessage) {
     if msg.message_text.to_lowercase().contains("ayy") {
-        say_rate_limited(combo, msg.channel_login.clone(), "lmao").await;
+        say_rate_limited(combo, msg.channel_login.as_str(), "lmao".to_string()).await;
     }
 }
 
@@ -52,7 +53,7 @@ async fn do_pyramid_counting(
         let num = chat_count.entry(name.to_string()).or_insert(0u8);
         *num += 1;
         let message = format!("{} lleva {} piramides", name, *num);
-        say_rate_limited(combo, msg.channel_login.clone(), message.as_str()).await;
+        say_rate_limited(combo, msg.channel_login.as_str(), message).await;
     }
 }
 
@@ -63,10 +64,10 @@ async fn do_pyramid_interference(
     emote_counts: &mut HashMap<String, usize>,
     emotes: &mut HashMap<String, String>,
 ) {
-    let channel = &msg.channel_login;
-    let pyramid_building = building_flags.get_mut(channel.as_str()).unwrap();
-    let emote_count = emote_counts.get_mut(channel.as_str()).unwrap();
-    let emote = emotes.get_mut(channel.as_str()).unwrap();
+    let channel = msg.channel_login.as_str();
+    let pyramid_building = building_flags.get_mut(channel).unwrap();
+    let emote_count = emote_counts.get_mut(channel).unwrap();
+    let emote = emotes.get_mut(channel).unwrap();
 
     if !msg.message_text.contains(" ") {
         *pyramid_building = true;
@@ -94,7 +95,7 @@ async fn do_pyramid_interference(
                 *emote_count -= 1;
                 if *emote_count == 2 {
                     println!("Time to strike");
-                    do_pyramid_action(combo, channel.as_str(), &emote).await;
+                    do_pyramid_action(combo, channel, &emote).await;
                     *pyramid_building = false;
                 }
             }
@@ -109,10 +110,10 @@ async fn do_pyramid_action(combo: &Combo, channel: &str, emote: &str) {
     let action: PyramidAction = rand::random();
     match action {
         PyramidAction::Steal => {
-            say_rate_limited(combo, channel.to_string(), emote).await;
+            say_rate_limited(combo, channel, emote.to_string()).await;
         }
         PyramidAction::Destroy => {
-            say_rate_limited(combo, "No".to_string(), emote).await;
+            say_rate_limited(combo, channel, "No".to_string()).await;
         }
         _ => println!("Do nothing"),
     }
@@ -145,7 +146,7 @@ pub async fn main() {
         let channel_name = &channel_to_connect.channel_name;
         building_flags.insert(channel_name.clone(), false);
         emote_counts.insert(channel_name.clone(), 0usize);
-        emotes.insert(channel_name.clone(), "".to_owned());
+        emotes.insert(channel_name.clone(), "".to_string());
         pyramid_count.insert(channel_name.clone(), HashMap::new());
     }
 
