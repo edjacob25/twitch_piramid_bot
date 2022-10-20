@@ -5,11 +5,17 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[workspace]
+members = [".", "entity", "migration"]
+
 [dependencies]
+entity = { path = "entity" }
+migration = { path = "migration" }
 config = {version = "0.13.1", features = ["toml"]}
 governor = "0.5.0"
 serde = "1.0.8"
 rand = "0.8.5"
 tokio = { version = "1", features = ["rt-multi-thread"] }
 twitch-irc = "5.0.0"
+sea-orm = { version = "0.9.3", features = [ "sqlx-sqlite", "runtime-tokio-rustls", "macros" ] }
 
