@@ -14,6 +14,11 @@ use twitch_piramid_bot::bot_config::BotConfig;
 use twitch_piramid_bot::chat_action::ChatAction;
 use twitch_piramid_bot::pyramid_action::PyramidAction;
 
+
+use migration::{DbErr, Migrator, MigratorTrait};
+use sea_orm::{Database, DbConn};
+use entity::{channel, user, channel_user};
+
 type Client = TwitchIRCClient<SecureTCPTransport, StaticLoginCredentials>;
 type Limiter = RateLimiter<String, DefaultKeyedStateStore<String>, DefaultClock>;
 
@@ -21,6 +26,19 @@ struct Combo {
     client: Client,
     limiter: Limiter,
 }
+
+pub async fn establish_connection() -> Result<DbConn, DbErr> {
+    let database_url = std::env::var("DATABASE_URL").unwrap();
+    let db = Database::connect(&database_url)
+        .await
+        .expect("Failed to setup the database");
+    Migrator::up(&db, None)
+        .await
+        .expect("Failed to run migrations for tests");
+
+    Ok(db)
+}
+
 
 async fn say_rate_limited(combo: &Combo, channel: &str, msg: String) {
     let channel = channel.to_string();
@@ -44,6 +62,8 @@ async fn do_pyramid_counting(
     pyramid_count: &mut HashMap<String, HashMap<String, u8>>,
 ) {
     if msg.sender.name == "StreamElements" && msg.message_text.contains("pirámide") {
+        let db = establish_connection();
+
         let chat_count = pyramid_count.get_mut(msg.channel_login.as_str()).unwrap();
         let as_vec = msg.message_text.split(" ").collect::<Vec<_>>();
         let name = as_vec[as_vec.len() - 2];
