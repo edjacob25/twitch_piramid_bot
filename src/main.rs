@@ -1,5 +1,6 @@
-use crate::chat_action::ChatAction;
-use crate::pyramid_action::PyramidAction;
+use twitch_piramid_bot::chat_action::ChatAction;
+use twitch_piramid_bot::pyramid_action::PyramidAction;
+use twitch_piramid_bot::bot_config::BotConfig;
 use config::Config;
 use governor::clock::DefaultClock;
 use governor::state::keyed::DefaultKeyedStateStore;
@@ -12,10 +13,6 @@ use twitch_irc::message::ServerMessage;
 use twitch_irc::ClientConfig;
 use twitch_irc::SecureTCPTransport;
 use twitch_irc::TwitchIRCClient;
-
-mod bot_config;
-mod chat_action;
-mod pyramid_action;
 
 type Client = TwitchIRCClient<SecureTCPTransport, StaticLoginCredentials>;
 type Limiter = RateLimiter<String, DefaultKeyedStateStore<String>, DefaultClock>;
@@ -127,7 +124,7 @@ pub async fn main() {
         .expect("Need the config");
 
     let conf = settings
-        .try_deserialize::<bot_config::BotConfig>()
+        .try_deserialize::<BotConfig>()
         .expect("Malformed config");
 
     let twitch_config = ClientConfig::new_simple(StaticLoginCredentials::new(
