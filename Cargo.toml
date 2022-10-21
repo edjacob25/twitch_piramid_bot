@@ -2,6 +2,7 @@
 name = "twitch_piramid_bot"
 version = "0.1.0"
 edition = "2021"
+default-run = "twitch_piramid_bot"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
