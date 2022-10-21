@@ -42,15 +42,22 @@ async fn do_ayy(combo: &Combo, msg: &twitch_irc::message::PrivmsgMessage) {
 async fn do_pyramid_counting(
     combo: &Combo,
     msg: &twitch_irc::message::PrivmsgMessage,
-    pyramid_count: &mut HashMap<String, HashMap<String, u8>>,
 ) {
     if msg.sender.name == "StreamElements" && msg.message_text.contains("pirámide") {
-        let chat_count = pyramid_count.get_mut(msg.channel_login.as_str()).unwrap();
         let as_vec = msg.message_text.split(" ").collect::<Vec<_>>();
         let name = as_vec[as_vec.len() - 2];
-        let num = chat_count.entry(name.to_string()).or_insert(0u8);
-        *num += 1;
-        let message = format!("{} lleva {} piramides", name, *num);
+        let db = DB::open_default("pyramids").unwrap();
+        let combined = format!("{} {}",msg.channel_login, name);
+        let mut num: u32 = match db.get(combined.as_bytes()) {
+            Ok(Some(value)) => {
+                String::from_utf8(value).unwrap().parse().unwrap()
+            }
+            Ok(None) => { 0 }
+            Err(_) => {0}
+        };
+        num += 1;
+        db.put(combined, format!("{}", num)).expect("Error with db");
+        let message = format!("{} lleva {} piramides", name, num);
         say_rate_limited(combo, msg.channel_login.as_str(), message).await;
     }
 }
@@ -138,14 +145,12 @@ pub async fn main() {
     let mut building_flags = HashMap::new();
     let mut emote_counts = HashMap::new();
     let mut emotes = HashMap::new();
-    let mut pyramid_count = HashMap::new();
 
     for channel_to_connect in &conf.channels {
         let channel_name = &channel_to_connect.channel_name;
         building_flags.insert(channel_name.clone(), false);
         emote_counts.insert(channel_name.clone(), 0usize);
         emotes.insert(channel_name.clone(), "".to_string());
-        pyramid_count.insert(channel_name.clone(), HashMap::new());
     }
 
     let cl = client.clone();
@@ -184,7 +189,7 @@ pub async fn main() {
                                 do_ayy(&combo, &msg).await;
                             }
                             ChatAction::PyramidCounting => {
-                                do_pyramid_counting(&combo, &msg, &mut pyramid_count).await;
+                                do_pyramid_counting(&combo, &msg).await;
                             }
                             ChatAction::PyramidInterference => {
                                 do_pyramid_interference(
