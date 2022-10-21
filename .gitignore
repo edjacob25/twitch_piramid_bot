@@ -1,3 +1,7 @@
 /target
 .idea/
 settings.toml
+.env
+.fleet
+*.sqlite
+*.db
