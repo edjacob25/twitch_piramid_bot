@@ -2,6 +2,7 @@ use config::Config;
 use governor::clock::DefaultClock;
 use governor::state::keyed::DefaultKeyedStateStore;
 use governor::{Quota, RateLimiter};
+use rocksdb::DB;
 use std::collections::HashMap;
 use std::num::NonZeroU32;
 use std::time::Duration;
