@@ -39,21 +39,16 @@ async fn do_ayy(combo: &Combo, msg: &twitch_irc::message::PrivmsgMessage) {
     }
 }
 
-async fn do_pyramid_counting(
-    combo: &Combo,
-    msg: &twitch_irc::message::PrivmsgMessage,
-) {
+async fn do_pyramid_counting(combo: &Combo, msg: &twitch_irc::message::PrivmsgMessage) {
     if msg.sender.name == "StreamElements" && msg.message_text.contains("pirámide") {
         let as_vec = msg.message_text.split(" ").collect::<Vec<_>>();
         let name = as_vec[as_vec.len() - 2];
-        let combined = format!("{} {}",msg.channel_login, name);
         let db = DB::open_default("pyramids.db").unwrap();
+        let combined = format!("{} {}", msg.channel_login, name);
         let mut num: u32 = match db.get(combined.as_bytes()) {
-            Ok(Some(value)) => {
-                String::from_utf8(value).unwrap().parse().unwrap()
-            }
-            Ok(None) => { 0 }
-            Err(_) => {0}
+            Ok(Some(value)) => String::from_utf8(value).unwrap().parse().unwrap(),
+            Ok(None) => 0,
+            Err(_) => 0,
         };
         num += 1;
         db.put(combined, format!("{}", num)).expect("Error with db");
