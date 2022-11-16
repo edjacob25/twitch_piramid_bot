@@ -34,11 +34,18 @@ fn check_all_column_names() {
 }
 
 fn main() {
-    let db = DB::open_default("pyramids").unwrap();
+    let db = DB::open_default("pyramids.db").unwrap();
+    let mut last = String::new();
     for item in db.iterator(IteratorMode::Start) {
         let (key, value) = item.unwrap();
         let key = String::from_utf8(key.into_vec()).unwrap();
+        let mut parts = key.split(" ");
+        let channel = parts.next().unwrap();
+        if last != channel {
+            println!("\nl{}\n----------------------------------------", channel);
+            last = channel.to_string();
+        }
         let value = String::from_utf8(value.into_vec()).unwrap();
-        println!("{} has {}", key, value);
+        println!("{} has {}", parts.next().unwrap(), value);
     }
 }

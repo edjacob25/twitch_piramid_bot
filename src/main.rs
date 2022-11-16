@@ -46,8 +46,8 @@ async fn do_pyramid_counting(
     if msg.sender.name == "StreamElements" && msg.message_text.contains("pirámide") {
         let as_vec = msg.message_text.split(" ").collect::<Vec<_>>();
         let name = as_vec[as_vec.len() - 2];
-        let db = DB::open_default("pyramids").unwrap();
         let combined = format!("{} {}",msg.channel_login, name);
+        let db = DB::open_default("pyramids.db").unwrap();
         let mut num: u32 = match db.get(combined.as_bytes()) {
             Ok(Some(value)) => {
                 String::from_utf8(value).unwrap().parse().unwrap()
