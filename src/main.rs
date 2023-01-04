@@ -1,6 +1,3 @@
-use twitch_piramid_bot::chat_action::ChatAction;
-use twitch_piramid_bot::pyramid_action::PyramidAction;
-use twitch_piramid_bot::bot_config::BotConfig;
 use config::Config;
 use governor::clock::DefaultClock;
 use governor::state::keyed::DefaultKeyedStateStore;
@@ -13,6 +10,9 @@ use twitch_irc::message::ServerMessage;
 use twitch_irc::ClientConfig;
 use twitch_irc::SecureTCPTransport;
 use twitch_irc::TwitchIRCClient;
+use twitch_piramid_bot::bot_config::BotConfig;
+use twitch_piramid_bot::chat_action::ChatAction;
+use twitch_piramid_bot::pyramid_action::PyramidAction;
 
 type Client = TwitchIRCClient<SecureTCPTransport, StaticLoginCredentials>;
 type Limiter = RateLimiter<String, DefaultKeyedStateStore<String>, DefaultClock>;
@@ -195,8 +195,24 @@ pub async fn main() {
                                 )
                                 .await;
                             }
+                            _ => {}
                         }
                     }
+                }
+                ServerMessage::UserNotice(msg) => {
+                    let channel_conf = channel_confs.get(&msg.channel_login).unwrap();
+
+                    if channel_conf.contains(&ChatAction::GiveSO) {
+                        if msg.event_id == "raid" {
+                            say_rate_limited(
+                                &combo,
+                                &msg.channel_login,
+                                format!("!so @{}", msg.sender.login),
+                            )
+                            .await;
+                        }
+                    }
+                    println!("{:?}", msg)
                 }
                 _ => {
                     println!("{:?}", message)

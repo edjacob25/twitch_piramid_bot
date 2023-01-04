@@ -6,6 +6,7 @@ pub enum ChatAction {
     Ayy,
     PyramidCounting,
     PyramidInterference,
+    GiveSO,
 }
 
 impl FromStr for ChatAction {

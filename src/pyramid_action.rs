@@ -9,9 +9,9 @@ pub enum PyramidAction {
 
 impl Distribution<PyramidAction> for Standard {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> PyramidAction {
-        match rng.gen_range(0..=2) {
-            0 => PyramidAction::DoNothing,
-            1 => PyramidAction::Steal,
+        match rng.gen_range(0..=9) {
+            0..=3 => PyramidAction::DoNothing,
+            4..=7 => PyramidAction::Steal,
             _ => PyramidAction::Destroy,
         }
     }
