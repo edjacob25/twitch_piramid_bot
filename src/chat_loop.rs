@@ -1,6 +1,7 @@
 use crate::bot_config::BotConfig;
 use crate::chat_action::ChatAction;
 use crate::pyramid_action::PyramidAction;
+use crate::state_manager::Command;
 use governor::clock::DefaultClock;
 use governor::state::keyed::DefaultKeyedStateStore;
 use governor::state::RateLimiter;
@@ -9,7 +10,9 @@ use rocksdb::DB;
 use std::collections::HashMap;
 use std::num::NonZeroU32;
 use std::time::Duration;
+use tokio::sync::mpsc::Sender;
 use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use twitch_irc::client::TwitchIRCClient;
 use twitch_irc::login::StaticLoginCredentials;
@@ -40,8 +43,27 @@ async fn do_ayy(combo: &Combo, msg: &twitch_irc::message::PrivmsgMessage) {
     }
 }
 
-async fn do_pyramid_counting(combo: &Combo, msg: &twitch_irc::message::PrivmsgMessage) {
+async fn do_pyramid_counting(
+    combo: &Combo,
+    msg: &twitch_irc::message::PrivmsgMessage,
+    sender: &Sender<Command>,
+) {
     if msg.sender.name == "StreamElements" && msg.message_text.contains("pirámide") {
+        let (tx, rx) = oneshot::channel();
+        let cmd = Command::Get {
+            key: msg.channel_login.clone(),
+            resp: tx,
+        };
+        let _ = sender.send(cmd).await;
+        let is_online = match rx.await {
+            Ok(res) => res,
+            Err(_) => false,
+        };
+
+        if !is_online {
+            return;
+        }
+
         let as_vec = msg.message_text.split(" ").collect::<Vec<_>>();
         let name = as_vec[as_vec.len() - 2];
         let db = DB::open_default("pyramids.db").unwrap();
@@ -124,6 +146,7 @@ pub fn message_loop(
     conf: &BotConfig,
     mut incoming_messages: UnboundedReceiver<ServerMessage>,
     cl: Client,
+    sender: Sender<Command>,
 ) -> JoinHandle<()> {
     let mut building_flags = HashMap::new();
     let mut emote_counts = HashMap::new();
@@ -171,7 +194,7 @@ pub fn message_loop(
                                 do_ayy(&combo, &msg).await;
                             }
                             ChatAction::PyramidCounting => {
-                                do_pyramid_counting(&combo, &msg).await;
+                                do_pyramid_counting(&combo, &msg, &sender).await;
                             }
                             ChatAction::PyramidInterference => {
                                 do_pyramid_interference(

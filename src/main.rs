@@ -1,10 +1,12 @@
 use config::Config;
+use tokio::sync::mpsc;
 use twitch_irc::login::StaticLoginCredentials;
 use twitch_irc::ClientConfig;
 use twitch_irc::SecureTCPTransport;
 use twitch_irc::TwitchIRCClient;
 use twitch_piramid_bot::bot_config::BotConfig;
 use twitch_piramid_bot::chat_loop::message_loop;
+use twitch_piramid_bot::state_manager::create_manager;
 
 #[tokio::main]
 pub async fn main() {
@@ -24,7 +26,9 @@ pub async fn main() {
     let (incoming_messages, client) =
         TwitchIRCClient::<SecureTCPTransport, StaticLoginCredentials>::new(twitch_config);
 
-    let join_handle = message_loop(&conf, incoming_messages, client.clone());
+    let (tx, rx) = mpsc::channel(32);
+    let _manager = create_manager(rx);
+    let join_handle = message_loop(&conf, incoming_messages, client.clone(), tx.clone());
 
     for channel_to_connect in &conf.channels {
         client
