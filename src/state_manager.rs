@@ -35,7 +35,7 @@ pub fn create_manager(mut receiver: Receiver<Command>) -> JoinHandle<()> {
                         Err(_) => false,
                     };
                     println!("Channel {} online status: {}", key, res);
-                    let _ = resp.send(true);
+                    let _ = resp.send(res);
                 }
                 Set { key, val, resp } => {
                     let savable = if val { vec![1] } else { vec![1] };
