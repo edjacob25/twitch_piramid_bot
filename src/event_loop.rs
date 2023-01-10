@@ -39,6 +39,7 @@ struct UserData {
     id: String,
     login: String,
     display_name: String,
+    #[serde(rename = "type")]
     user_type: String,
     broadcaster_type: String,
     description: String,
@@ -46,25 +47,6 @@ struct UserData {
     offline_image_url: String,
     view_count: u32,
     created_at: String,
-}
-
-fn construct_sub_request(
-    broadcaster_user_id: String,
-    session_id: String,
-    sub_type: String,
-) -> String {
-    let body = RequestBody {
-        sub_type,
-        version: "1".to_string(),
-        condition: Condition {
-            broadcaster_user_id,
-        },
-        transport: Transport {
-            method: "websockets".to_string(),
-            session_id,
-        },
-    };
-    serde_json::to_string(&body).expect("Failed to serialize request body")
 }
 
 type WSClient = websocket::client::sync::Client<Box<dyn NetworkStream + Send>>;
@@ -91,11 +73,17 @@ async fn process_message(
                             .post("https://api.twitch.tv/helix/eventsub/subscriptions")
                             .bearer_auth(token.clone())
                             .header("Client-Id", client_id.clone())
-                            .body(construct_sub_request(
-                                id.clone(),
-                                m.session.id.clone(),
-                                "stream.online".to_string(),
-                            ))
+                            .json(&RequestBody {
+                                sub_type: "stream.online".to_string(),
+                                version: "1".to_string(),
+                                condition: Condition {
+                                    broadcaster_user_id: id.clone(),
+                                },
+                                transport: Transport {
+                                    method: "websocket".to_string(),
+                                    session_id: m.session.id.clone(),
+                                },
+                            })
                             .send()
                             .await
                             .expect("Error sending event subscription request");
@@ -108,11 +96,17 @@ async fn process_message(
                             .post("https://api.twitch.tv/helix/eventsub/subscriptions")
                             .bearer_auth(token.clone())
                             .header("Client-Id", client_id.clone())
-                            .body(construct_sub_request(
-                                id.clone(),
-                                m.session.id.clone(),
-                                "stream.offline".to_string(),
-                            ))
+                            .json(&RequestBody {
+                                sub_type: "stream.offline".to_string(),
+                                version: "1".to_string(),
+                                condition: Condition {
+                                    broadcaster_user_id: id.clone(),
+                                },
+                                transport: Transport {
+                                    method: "websocket".to_string(),
+                                    session_id: m.session.id.clone(),
+                                },
+                            })
                             .send()
                             .await
                             .expect("Error sending event subscription request");

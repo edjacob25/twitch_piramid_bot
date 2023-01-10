@@ -12,7 +12,7 @@ governor = "0.5.1"
 serde = "1.0.148"
 serde_json = "1.0.91"
 rand = "0.8.5"
-reqwest = "0.11.13"
+reqwest = { version = "0.11.13", features = ["json"] }
 rocksdb = "0.19.0"
 tokio = { version = "1", features = ["rt-multi-thread"] }
 twitch-irc = "5.0.0"

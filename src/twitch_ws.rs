@@ -5,6 +5,7 @@ use serde::Deserialize;
 use std::str::FromStr;
 
 #[derive(Debug, Deserialize)]
+#[serde(from = "String")]
 pub enum MessageType {
     Welcome,
     KeepAlive,
@@ -13,17 +14,15 @@ pub enum MessageType {
     Revocation,
 }
 
-impl FromStr for MessageType {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "session_welcome" => Ok(MessageType::Welcome),
-            "session_keepalive" => Ok(MessageType::KeepAlive),
-            "notification" => Ok(MessageType::Notification),
-            "session_reconnect" => Ok(MessageType::Reconnect),
-            "revocation" => Ok(MessageType::Revocation),
-            _ => Err(()),
+impl From<String> for MessageType {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "session_welcome" => MessageType::Welcome,
+            "session_keepalive" => MessageType::KeepAlive,
+            "notification" => MessageType::Notification,
+            "session_reconnect" => MessageType::Reconnect,
+            "revocation" => MessageType::Revocation,
+            _ => MessageType::KeepAlive,
         }
     }
 }
@@ -35,7 +34,7 @@ pub struct Subscription {
     #[serde(rename = "type")]
     pub sub_type: String,
     pub version: String,
-    pub cost: String,
+    pub cost: u32,
     pub condition: Condition,
     pub transport: Transport,
     pub created_at: String,
