@@ -6,6 +6,7 @@ use twitch_irc::SecureTCPTransport;
 use twitch_irc::TwitchIRCClient;
 use twitch_piramid_bot::bot_config::BotConfig;
 use twitch_piramid_bot::chat_loop::message_loop;
+use twitch_piramid_bot::event_loop::create_event_loop;
 use twitch_piramid_bot::state_manager::create_manager;
 
 #[tokio::main]
@@ -28,6 +29,7 @@ pub async fn main() {
 
     let (tx, rx) = mpsc::channel(32);
     let _manager = create_manager(rx);
+    let _event_loop = create_event_loop(&conf, tx.clone());
     let join_handle = message_loop(&conf, incoming_messages, client.clone(), tx.clone());
 
     for channel_to_connect in &conf.channels {

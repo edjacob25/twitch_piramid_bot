@@ -6,6 +6,7 @@ use std::collections::HashSet;
 pub struct BotConfig {
     pub name: String,
     pub oauth_token: String,
+    pub client_id: String,
     pub channels: Vec<ChannelConfig>,
 }
 
