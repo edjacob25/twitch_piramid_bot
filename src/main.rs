@@ -26,9 +26,10 @@ pub async fn main() {
     ));
     let (incoming_messages, client) =
         TwitchIRCClient::<SecureTCPTransport, StaticLoginCredentials>::new(twitch_config);
+    //client.send_message(IRCMessage::parse("CAP REQ :twitch.tv/commands twitch.tv/tags").unwrap());
 
     let (tx, rx) = mpsc::channel(32);
-    let _manager = create_manager(rx);
+    let _manager = create_manager(&conf, rx);
     let _event_loop = create_event_loop(&conf, tx.clone());
     let join_handle = message_loop(&conf, incoming_messages, client.clone(), tx.clone());
 
