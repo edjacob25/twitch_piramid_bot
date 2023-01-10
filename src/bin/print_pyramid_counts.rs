@@ -2,6 +2,7 @@ use config::Config;
 use rocksdb::{IteratorMode, Options, DB};
 extern crate twitch_piramid_bot;
 
+#[allow(dead_code)]
 fn check_all_column_names() {
     let settings = Config::builder()
         .add_source(config::File::with_name("settings.toml"))
