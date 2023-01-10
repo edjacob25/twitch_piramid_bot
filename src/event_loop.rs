@@ -165,6 +165,8 @@ pub fn create_event_loop(conf: &BotConfig, sender: Sender<Command>) -> JoinHandl
 
         let res = http_client
             .get("https://api.twitch.tv/helix/users")
+            .bearer_auth(token.clone())
+            .header("Client-Id", client_id.clone())
             .query(&user_query)
             .send()
             .await
