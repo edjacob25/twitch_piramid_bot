@@ -3,3 +3,4 @@ pub mod chat_action;
 pub mod chat_loop;
 pub mod pyramid_action;
 pub mod state_manager;
+pub mod twitch_ws;
