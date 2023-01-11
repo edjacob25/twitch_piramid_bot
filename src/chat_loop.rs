@@ -1,4 +1,4 @@
-use crate::bot_config::BotConfig;
+use crate::bot_config::{BotConfig, ChannelConfig};
 use crate::chat_action::ChatAction;
 use crate::pyramid_action::PyramidAction;
 use crate::state_manager::Command;
@@ -51,7 +51,7 @@ async fn do_pyramid_counting(
 ) {
     if msg.sender.name == "StreamElements" && msg.message_text.contains("pirámide") {
         let (tx, rx) = oneshot::channel();
-        let cmd = Command::Get {
+        let cmd = Command::GetChannelStatus {
             key: msg.channel_login.clone(),
             resp: tx,
         };
@@ -143,6 +143,56 @@ async fn do_pyramid_action(combo: &Combo, channel: &str, emote: &str) {
     }
 }
 
+async fn do_auto_so(
+    sender: &Sender<Command>,
+    combo: &Combo,
+    msg: &twitch_irc::message::PrivmsgMessage,
+    channel_conf: &ChannelConfig,
+) {
+    match &channel_conf.auto_so_channels {
+        Some(auto_so_channels) => {
+            info!("{} {}", msg.channel_login, msg.sender.name);
+            if auto_so_channels.contains(&msg.sender.name) {
+                let (tx, rx) = oneshot::channel();
+                let cmd = Command::GetSoStatus {
+                    channel: msg.channel_login.clone(),
+                    so_channel: msg.sender.name.clone(),
+                    resp: tx,
+                };
+                sender
+                    .send(cmd)
+                    .await
+                    .expect("Could not send request for so status");
+                let already_sod = match rx.await {
+                    Ok(res) => res,
+                    Err(_) => true,
+                };
+                if !already_sod {
+                    say_rate_limited(
+                        &combo,
+                        &msg.channel_login,
+                        format!("!so {}", msg.sender.name),
+                    )
+                    .await;
+                    let (tx, rx) = oneshot::channel();
+                    let cmd = Command::SetSoStatus {
+                        channel: msg.channel_login.clone(),
+                        so_channel: msg.sender.name.clone(),
+                        val: true,
+                        resp: tx,
+                    };
+                    sender
+                        .send(cmd)
+                        .await
+                        .expect("Could not send request for so status");
+                    assert_eq!(rx.await.unwrap(), ())
+                }
+            }
+        }
+        None => {}
+    }
+}
+
 pub fn message_loop(
     conf: &BotConfig,
     mut incoming_messages: UnboundedReceiver<ServerMessage>,
@@ -161,11 +211,11 @@ pub fn message_loop(
     }
 
     let channel_confs = conf.channels.iter().fold(HashMap::new(), |mut acc, c| {
-        *acc.entry(c.channel_name.clone()).or_default() = c
-            .permitted_actions
-            .iter()
-            .map(|c| c.clone())
-            .collect::<Vec<_>>();
+        *acc.entry(c.channel_name.clone()).or_insert(ChannelConfig {
+            channel_name: "".to_string(),
+            permitted_actions: Default::default(),
+            auto_so_channels: Default::default(),
+        }) = c.clone();
         acc
     });
     let join_handle = tokio::spawn(async move {
@@ -190,7 +240,7 @@ pub fn message_loop(
 
                     let channel_conf = channel_confs.get(&msg.channel_login).unwrap();
 
-                    for action in channel_conf {
+                    for action in channel_conf.permitted_actions.iter() {
                         match action {
                             ChatAction::Ayy => {
                                 do_ayy(&combo, &msg).await;
@@ -208,6 +258,10 @@ pub fn message_loop(
                                 )
                                 .await;
                             }
+
+                            ChatAction::AutoSO => {
+                                do_auto_so(&sender, &combo, &msg, &channel_conf).await;
+                            }
                             _ => {}
                         }
                     }
@@ -215,7 +269,7 @@ pub fn message_loop(
                 ServerMessage::UserNotice(msg) => {
                     let channel_conf = channel_confs.get(&msg.channel_login).unwrap();
 
-                    if channel_conf.contains(&ChatAction::GiveSO) {
+                    if channel_conf.permitted_actions.contains(&ChatAction::GiveSO) {
                         if msg.event_id == "raid" {
                             say_rate_limited(
                                 &combo,

@@ -10,8 +10,9 @@ pub struct BotConfig {
     pub channels: Vec<ChannelConfig>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct ChannelConfig {
     pub channel_name: String,
     pub permitted_actions: HashSet<ChatAction>,
+    pub auto_so_channels: Option<HashSet<String>>,
 }

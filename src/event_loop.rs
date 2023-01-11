@@ -130,14 +130,30 @@ async fn process_message(
                     let m = NotificationMessage::from(msg.payload);
                     let (tx, rx) = oneshot::channel();
                     let val = m.event.online_type.is_some();
-
-                    let cmd = Command::Set {
-                        key: m.event.broadcaster_user_name,
+                    info!(
+                        "Sending {} to channel {}",
+                        m.event.broadcaster_user_name, val
+                    );
+                    let cmd = Command::SetChannelStatus {
+                        key: m.event.broadcaster_user_name.clone(),
                         val,
                         resp: tx,
                     };
                     let _ = sender.send(cmd).await;
-                    assert_eq!(rx.await.unwrap(), ())
+                    assert_eq!(rx.await.unwrap(), ());
+                    if val {
+                        let (tx, rx) = oneshot::channel();
+                        info!(
+                            "Reseting autoso status for channel {}",
+                            m.event.broadcaster_user_name
+                        );
+                        let cmd = Command::ResetSoStatus {
+                            channel: m.event.broadcaster_user_name,
+                            resp: tx,
+                        };
+                        let _ = sender.send(cmd).await;
+                        assert_eq!(rx.await.unwrap(), ())
+                    }
                 }
                 MessageType::Reconnect => {}
                 MessageType::Revocation => {}
