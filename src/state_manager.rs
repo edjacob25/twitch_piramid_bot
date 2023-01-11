@@ -1,4 +1,5 @@
 use crate::bot_config::BotConfig;
+use log::{debug, info};
 use reqwest::Client;
 use rocksdb::DB;
 use serde::Deserialize;
@@ -47,7 +48,7 @@ pub fn create_manager(conf: &BotConfig, mut receiver: Receiver<Command>) -> Join
         .collect::<Vec<_>>();
 
     let handle = tokio::spawn(async move {
-        println!("Starting manager");
+        info!("Starting manager");
         let db = DB::open_default("online.db").unwrap();
         channel_names.iter().for_each(|channel| {
             db.put(channel.clone(), vec![0]).expect("Could not set db");
@@ -86,10 +87,11 @@ pub fn create_manager(conf: &BotConfig, mut receiver: Receiver<Command>) -> Join
                         Ok(None) => false,
                         Err(_) => false,
                     };
-                    println!("Channel {} online status: {}", key, res);
+                    debug!("Channel {} online status: {}", key, res);
                     let _ = resp.send(res);
                 }
                 Set { key, val, resp } => {
+                    debug!("Setting channel {} online status: {}", key, res);
                     let savable = if val { vec![1] } else { vec![1] };
                     db.put(key, savable).expect("Cannot set online status");
                     resp.send(()).expect("Cannot callback");

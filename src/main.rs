@@ -1,4 +1,5 @@
 use config::Config;
+use simple_logger::SimpleLogger;
 use tokio::sync::mpsc;
 use twitch_irc::login::StaticLoginCredentials;
 use twitch_irc::ClientConfig;
@@ -11,6 +12,7 @@ use twitch_piramid_bot::state_manager::create_manager;
 
 #[tokio::main]
 pub async fn main() {
+    SimpleLogger::new().env().init().unwrap();
     let settings = Config::builder()
         .add_source(config::File::with_name("settings.toml"))
         .build()

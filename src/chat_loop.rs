@@ -6,6 +6,7 @@ use governor::clock::DefaultClock;
 use governor::state::keyed::DefaultKeyedStateStore;
 use governor::state::RateLimiter;
 use governor::Quota;
+use log::{debug, info, warn};
 use rocksdb::DB;
 use std::collections::HashMap;
 use std::num::NonZeroU32;
@@ -32,7 +33,7 @@ async fn say_rate_limited(combo: &Combo, channel: &str, msg: String) {
     match combo.limiter.check_key(&channel) {
         Ok(_) => combo.client.say(channel, msg).await.unwrap(),
         Err(_) => {
-            println!("Rate limited")
+            warn!("Rate limited")
         }
     }
 }
@@ -96,7 +97,7 @@ async fn do_pyramid_interference(
         *pyramid_building = true;
         *emote_count = 1;
         *emote = msg.message_text.clone();
-        println!("Single word {}", *emote);
+        info!("Single word {}", *emote);
     } else if *pyramid_building {
         let num_of_matches = msg
             .message_text
@@ -110,14 +111,14 @@ async fn do_pyramid_interference(
         }
         match num_of_matches {
             i if i == *emote_count + 1 => {
-                println!("Pyramid growing");
+                info!("Pyramid growing");
                 *emote_count += 1;
             }
             i if i == *emote_count - 1 => {
-                println!("Pyramid getting smaller");
+                info!("Pyramid getting smaller");
                 *emote_count -= 1;
                 if *emote_count == 2 {
-                    println!("Time to strike");
+                    warn!("Time to strike");
                     do_pyramid_action(combo, channel, &emote).await;
                     *pyramid_building = false;
                 }
@@ -138,7 +139,7 @@ async fn do_pyramid_action(combo: &Combo, channel: &str, emote: &str) {
         PyramidAction::Destroy => {
             say_rate_limited(combo, channel, "No".to_string()).await;
         }
-        _ => println!("Do nothing"),
+        _ => warn!("Do nothing"),
     }
 }
 
@@ -181,7 +182,7 @@ pub fn message_loop(
         while let Some(message) = incoming_messages.recv().await {
             match message {
                 ServerMessage::Privmsg(msg) => {
-                    println!(
+                    info!(
                         "(#{}) {}: {}",
                         msg.channel_login, msg.sender.name, msg.message_text
                     );
@@ -223,10 +224,10 @@ pub fn message_loop(
                             .await;
                         }
                     }
-                    println!("{:?}", msg)
+                    debug!("{:?}", msg)
                 }
                 _ => {
-                    println!("{:?}", message)
+                    debug!("{:?}", message)
                 }
             }
         }

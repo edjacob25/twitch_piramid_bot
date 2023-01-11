@@ -1,6 +1,7 @@
 use crate::bot_config::BotConfig;
 use crate::state_manager::Command;
 use crate::twitch_ws::{GeneralMessage, MessageType, NotificationMessage, WelcomeMessage};
+use log::{debug, error, info};
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::Sender;
@@ -63,7 +64,7 @@ async fn process_message(
     match m {
         OwnedMessage::Text(msg) => {
             let msg: GeneralMessage = serde_json::from_str(&msg).unwrap();
-            println!("{:?}", msg);
+            debug!("{:?}", msg);
             match msg.metadata.message_type {
                 MessageType::Welcome => {
                     let m = WelcomeMessage::from(msg.payload);
@@ -89,7 +90,9 @@ async fn process_message(
                             .expect("Error sending event subscription request");
 
                         if res.status() == StatusCode::ACCEPTED {
-                            println!("Accepted permission")
+                            info!("Accepted stream.online permission for {}", id)
+                        } else {
+                            error!("Error getting the stream.online sub")
                         }
 
                         let res = http_client
@@ -112,7 +115,9 @@ async fn process_message(
                             .expect("Error sending event subscription request");
 
                         if res.status() == StatusCode::ACCEPTED {
-                            println!("Accepted permission")
+                            info!("Accepted stream.offline permission for {}", id)
+                        } else {
+                            error!("Error getting the stream.offline sub")
                         }
                     }
                 }

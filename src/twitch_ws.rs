@@ -2,7 +2,6 @@
 
 use serde;
 use serde::Deserialize;
-use std::str::FromStr;
 
 #[derive(Debug, Deserialize)]
 #[serde(from = "String")]
