@@ -3,7 +3,7 @@ use simple_logger::SimpleLogger;
 use tokio::sync::mpsc;
 use twitch_irc::login::StaticLoginCredentials;
 use twitch_irc::ClientConfig;
-use twitch_irc::SecureTCPTransport;
+use twitch_irc::SecureWSTransport;
 use twitch_irc::TwitchIRCClient;
 use twitch_piramid_bot::bot_config::BotConfig;
 use twitch_piramid_bot::chat_loop::message_loop;
@@ -27,7 +27,7 @@ pub async fn main() {
         Some(conf.oauth_token.clone()),
     ));
     let (incoming_messages, client) =
-        TwitchIRCClient::<SecureTCPTransport, StaticLoginCredentials>::new(twitch_config);
+        TwitchIRCClient::<SecureWSTransport, StaticLoginCredentials>::new(twitch_config);
     //client.send_message(IRCMessage::parse("CAP REQ :twitch.tv/commands twitch.tv/tags").unwrap());
 
     let (tx, rx) = mpsc::channel(32);

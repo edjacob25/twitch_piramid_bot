@@ -1,14 +1,19 @@
 use crate::bot_config::BotConfig;
 use crate::state_manager::Command;
 use crate::twitch_ws::{GeneralMessage, MessageType, NotificationMessage, WelcomeMessage};
+use futures_util::stream::SplitSink;
+use futures_util::{SinkExt, StreamExt};
 use log::{debug, error, info};
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
+use tokio::net::TcpStream;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
-use websocket::stream::sync::NetworkStream;
-use websocket::{ClientBuilder, OwnedMessage};
+use tokio::time::sleep;
+use tokio_tungstenite::tungstenite::{Message, WebSocket};
+use tokio_tungstenite::{client_async, connect_async, MaybeTlsStream, WebSocketStream};
 
 #[derive(Debug, Serialize)]
 struct RequestBody {
@@ -50,10 +55,10 @@ struct UserData {
     created_at: String,
 }
 
-type WSClient = websocket::client::sync::Client<Box<dyn NetworkStream + Send>>;
+type WSClient = SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>;
 
 async fn process_message(
-    m: OwnedMessage,
+    m: Message,
     broadcasters_ids: &Vec<String>,
     http_client: &Client,
     ws_client: &mut WSClient,
@@ -62,8 +67,9 @@ async fn process_message(
     sender: &Sender<Command>,
 ) {
     match m {
-        OwnedMessage::Text(msg) => {
-            let msg: GeneralMessage = serde_json::from_str(&msg).unwrap();
+        Message::Text(msg) => {
+            let msg: GeneralMessage =
+                serde_json::from_str(&msg).expect("Could not parse message from ws");
             debug!("{:?}", msg);
             match msg.metadata.message_type {
                 MessageType::Welcome => {
@@ -139,10 +145,10 @@ async fn process_message(
                 MessageType::Revocation => {}
             }
         }
-        OwnedMessage::Close(_) => {}
-        OwnedMessage::Ping(data) => {
-            let pong = OwnedMessage::Pong(data);
-            let _res = ws_client.send_message(&pong);
+        Message::Close(_) => {}
+        Message::Ping(data) => {
+            let pong = Message::Pong(data);
+            let _res = ws_client.send(pong);
         }
         _ => {}
     }
@@ -158,8 +164,11 @@ pub fn create_event_loop(conf: &BotConfig, sender: Sender<Command>) -> JoinHandl
         .collect::<Vec<_>>();
 
     tokio::spawn(async move {
-        let mut builder = ClientBuilder::new("wss://eventsub-beta.wss.twitch.tv/ws")
-            .expect("Cannot create builder");
+        sleep(Duration::from_secs(30)).await;
+        let (stream, _) = connect_async("wss://eventsub-beta.wss.twitch.tv/ws")
+            .await
+            .expect("Could not connect to twitch");
+        let (mut ws_write, mut ws_read) = stream.split();
         let http_client = Client::new();
 
         let res = http_client
@@ -182,14 +191,12 @@ pub fn create_event_loop(conf: &BotConfig, sender: Sender<Command>) -> JoinHandl
             .map(|p| p.id.clone())
             .collect::<Vec<_>>();
 
-        let mut ws_client = builder.connect(None).unwrap();
-
-        while let Some(message) = ws_client.incoming_messages().next() {
+        while let Some(message) = ws_read.next().await {
             process_message(
-                message.unwrap(),
+                message.expect("Could not receive message from ws"),
                 &broadcasters_ids,
                 &http_client,
-                &mut ws_client,
+                &mut ws_write,
                 &token,
                 &client_id,
                 &sender,

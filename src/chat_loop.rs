@@ -18,9 +18,9 @@ use tokio::task::JoinHandle;
 use twitch_irc::client::TwitchIRCClient;
 use twitch_irc::login::StaticLoginCredentials;
 use twitch_irc::message::ServerMessage;
-use twitch_irc::transport::tcp::SecureTCPTransport;
+use twitch_irc::transport::websocket::SecureWSTransport;
 
-type Client = TwitchIRCClient<SecureTCPTransport, StaticLoginCredentials>;
+type Client = TwitchIRCClient<SecureWSTransport, StaticLoginCredentials>;
 type Limiter = RateLimiter<String, DefaultKeyedStateStore<String>, DefaultClock>;
 
 struct Combo {
@@ -179,6 +179,7 @@ pub fn message_loop(
             client: cl,
             limiter: lim,
         };
+        info!("Starting chat");
         while let Some(message) = incoming_messages.recv().await {
             match message {
                 ServerMessage::Privmsg(msg) => {
