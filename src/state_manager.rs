@@ -92,7 +92,7 @@ pub fn create_manager(conf: &BotConfig, mut receiver: Receiver<Command>) -> Join
                 }
                 Set { key, val, resp } => {
                     debug!("Setting channel {} online status: {}", key, res);
-                    let savable = if val { vec![1] } else { vec![1] };
+                    let savable = if val { vec![1] } else { vec![0] };
                     db.put(key, savable).expect("Cannot set online status");
                     resp.send(()).expect("Cannot callback");
                 }
