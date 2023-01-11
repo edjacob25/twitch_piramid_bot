@@ -6,14 +6,12 @@ use futures_util::{SinkExt, StreamExt};
 use log::{debug, error, info};
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
-use tokio::time::sleep;
-use tokio_tungstenite::tungstenite::{Message, WebSocket};
-use tokio_tungstenite::{client_async, connect_async, MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 
 #[derive(Debug, Serialize)]
 struct RequestBody {
@@ -164,7 +162,6 @@ pub fn create_event_loop(conf: &BotConfig, sender: Sender<Command>) -> JoinHandl
         .collect::<Vec<_>>();
 
     tokio::spawn(async move {
-        sleep(Duration::from_secs(30)).await;
         let (stream, _) = connect_async("wss://eventsub-beta.wss.twitch.tv/ws")
             .await
             .expect("Could not connect to twitch");
