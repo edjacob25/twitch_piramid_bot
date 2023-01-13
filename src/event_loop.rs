@@ -1,7 +1,9 @@
 use crate::bot_config::BotConfig;
 use crate::state_manager::Command;
-use crate::twitch_ws::{GeneralMessage, MessageType, NotificationMessage, WelcomeMessage};
-use futures_util::stream::SplitSink;
+use crate::twitch_ws::{
+    GeneralMessage, MessageType, NotificationMessage, ReconnectMessage, WelcomeMessage,
+};
+use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
 use log::{debug, error, info};
 use reqwest::{Client, StatusCode};
@@ -53,17 +55,24 @@ struct UserData {
     created_at: String,
 }
 
-type WSClient = SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>;
+type WSWriter = SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>;
+type WSReader = SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>;
+
+enum MessageResponse {
+    ConnectionSucessful,
+    Reconnect(String),
+}
 
 async fn process_message(
     m: Message,
     broadcasters_ids: &Vec<String>,
     http_client: &Client,
-    ws_client: &mut WSClient,
+    ws_client: &mut WSWriter,
     token: &str,
     client_id: &str,
     sender: &Sender<Command>,
-) {
+    reconnecting: bool,
+) -> Option<MessageResponse> {
     match m {
         Message::Text(msg) => {
             let msg: GeneralMessage =
@@ -71,6 +80,10 @@ async fn process_message(
             debug!("{:?}", msg);
             match msg.metadata.message_type {
                 MessageType::Welcome => {
+                    if reconnecting {
+                        return Some(MessageResponse::ConnectionSucessful);
+                    }
+
                     let m = WelcomeMessage::from(msg.payload);
 
                     for id in broadcasters_ids.iter() {
@@ -124,6 +137,8 @@ async fn process_message(
                             error!("Error getting the stream.offline sub")
                         }
                     }
+
+                    return Some(MessageResponse::ConnectionSucessful);
                 }
                 MessageType::KeepAlive => {}
                 MessageType::Notification => {
@@ -155,17 +170,26 @@ async fn process_message(
                         assert_eq!(rx.await.unwrap(), ())
                     }
                 }
-                MessageType::Reconnect => {}
+                MessageType::Reconnect => {
+                    let m = ReconnectMessage::from(msg.payload);
+                    error!("Should reconnect");
+                    return Some(MessageResponse::Reconnect(
+                        m.session.reconnect_url.expect("There was no reconnect url"),
+                    ));
+                }
                 MessageType::Revocation => {}
             }
         }
-        Message::Close(_) => {}
+        Message::Close(_) => {
+            error!("Closing connection");
+        }
         Message::Ping(data) => {
             let pong = Message::Pong(data);
             let _res = ws_client.send(pong);
         }
         _ => {}
     }
+    return None;
 }
 
 pub fn create_event_loop(conf: &BotConfig, sender: Sender<Command>) -> JoinHandle<()> {
@@ -178,12 +202,7 @@ pub fn create_event_loop(conf: &BotConfig, sender: Sender<Command>) -> JoinHandl
         .collect::<Vec<_>>();
 
     tokio::spawn(async move {
-        let (stream, _) = connect_async("wss://eventsub-beta.wss.twitch.tv/ws")
-            .await
-            .expect("Could not connect to twitch");
-        let (mut ws_write, mut ws_read) = stream.split();
         let http_client = Client::new();
-
         let res = http_client
             .get("https://api.twitch.tv/helix/users")
             .bearer_auth(token.clone())
@@ -204,17 +223,43 @@ pub fn create_event_loop(conf: &BotConfig, sender: Sender<Command>) -> JoinHandl
             .map(|p| p.id.clone())
             .collect::<Vec<_>>();
 
-        while let Some(message) = ws_read.next().await {
-            process_message(
-                message.expect("Could not receive message from ws"),
-                &broadcasters_ids,
-                &http_client,
-                &mut ws_write,
-                &token,
-                &client_id,
-                &sender,
-            )
-            .await;
+        let mut address = "wss://eventsub-beta.wss.twitch.tv/ws".to_string();
+        let mut last_client: Option<(WSWriter, WSReader)> = None;
+        loop {
+            let (stream, _) = connect_async(&address)
+                .await
+                .expect("Could not connect to twitch");
+            let (mut ws_write, mut ws_read) = stream.split();
+            while let Some(message) = ws_read.next().await {
+                let rec = process_message(
+                    message.expect("Could not receive message from ws"),
+                    &broadcasters_ids,
+                    &http_client,
+                    &mut ws_write,
+                    &token,
+                    &client_id,
+                    &sender,
+                    last_client.is_some(),
+                )
+                .await;
+                match rec {
+                    None => {}
+                    Some(resp) => match resp {
+                        MessageResponse::ConnectionSucessful => match last_client {
+                            None => {}
+                            Some((mut old_w, _)) => {
+                                let _ = old_w.close();
+                                last_client = None;
+                            }
+                        },
+                        MessageResponse::Reconnect(reconnect_url) => {
+                            address = reconnect_url;
+                            break;
+                        }
+                    },
+                }
+            }
+            last_client = Some((ws_write, ws_read));
         }
     })
 }
