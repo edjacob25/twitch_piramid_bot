@@ -1,4 +1,5 @@
 use crate::bot_config::BotConfig;
+use crate::event_loop::MessageResponse::Continue;
 use crate::state_manager::Command;
 use crate::twitch_ws::{
     GeneralMessage, MessageType, NotificationMessage, ReconnectMessage, WelcomeMessage,
@@ -60,7 +61,127 @@ type WSReader = SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>;
 
 enum MessageResponse {
     ConnectionSucessful,
+    Continue,
     Reconnect(String),
+}
+
+struct EventData<'a> {
+    event: &'a str,
+    broadcaster_id: &'a str,
+    session_id: String,
+}
+
+struct HttpHeaders {
+    token: String,
+    client_id: String,
+}
+
+async fn register_event(event_data: EventData<'_>, http_client: &Client, headers: &HttpHeaders) {
+    let res = http_client
+        .post("https://api.twitch.tv/helix/eventsub/subscriptions")
+        .bearer_auth(&(headers.token))
+        .header("Client-Id", &(headers.client_id))
+        .json(&RequestBody {
+            sub_type: event_data.event.to_string(),
+            version: "1".to_string(),
+            condition: Condition {
+                broadcaster_user_id: event_data.broadcaster_id.to_string(),
+            },
+            transport: Transport {
+                method: "websocket".to_string(),
+                session_id: event_data.session_id,
+            },
+        })
+        .send()
+        .await
+        .expect("Error sending event subscription request");
+
+    if res.status() == StatusCode::ACCEPTED {
+        info!(
+            "Accepted {} permission for {}",
+            event_data.event, event_data.broadcaster_id
+        )
+    } else {
+        error!("Error getting the stream.online sub")
+    }
+}
+
+async fn process_text_message(
+    broadcasters_ids: &Vec<String>,
+    http_client: &Client,
+    headers: &HttpHeaders,
+    sender: &Sender<Command>,
+    reconnecting: bool,
+    msg: &String,
+) -> MessageResponse {
+    let msg: GeneralMessage = serde_json::from_str(&msg).expect("Could not parse message from ws");
+    debug!("{:?}", msg);
+    match msg.metadata.message_type {
+        MessageType::Welcome => {
+            if reconnecting {
+                return MessageResponse::ConnectionSucessful;
+            }
+
+            let m = WelcomeMessage::from(msg.payload);
+
+            for id in broadcasters_ids.iter() {
+                let event_data = EventData {
+                    event: "stream.online",
+                    broadcaster_id: id,
+                    session_id: m.session.id.clone(),
+                };
+                register_event(event_data, http_client, headers).await;
+
+                let event_data = EventData {
+                    event: "stream.offline",
+                    broadcaster_id: id,
+                    session_id: m.session.id.clone(),
+                };
+                register_event(event_data, http_client, headers).await;
+            }
+
+            return MessageResponse::ConnectionSucessful;
+        }
+        MessageType::KeepAlive => {}
+        MessageType::Notification => {
+            let m = NotificationMessage::from(msg.payload);
+            let (tx, rx) = oneshot::channel();
+            let val = m.event.online_type.is_some();
+            info!(
+                "Sending {} to channel {}",
+                m.event.broadcaster_user_name, val
+            );
+            let cmd = Command::SetChannelStatus {
+                key: m.event.broadcaster_user_name.clone(),
+                val,
+                resp: tx,
+            };
+            let _ = sender.send(cmd).await;
+            assert_eq!(rx.await.unwrap(), ());
+            if val {
+                let (tx, rx) = oneshot::channel();
+                info!(
+                    "Reseting autoso status for channel {}",
+                    m.event.broadcaster_user_name
+                );
+                let cmd = Command::ResetSoStatus {
+                    channel: m.event.broadcaster_user_name,
+                    resp: tx,
+                };
+                let _ = sender.send(cmd).await;
+                assert_eq!(rx.await.unwrap(), ())
+            }
+        }
+        MessageType::Reconnect => {
+            let m = ReconnectMessage::from(msg.payload);
+            error!("Should reconnect");
+            return MessageResponse::Reconnect(
+                m.session.reconnect_url.expect("There was no reconnect url"),
+            );
+        }
+        MessageType::Revocation => {}
+    }
+    return Continue;
 }
 
 async fn process_message(
@@ -68,117 +189,21 @@ async fn process_message(
     broadcasters_ids: &Vec<String>,
     http_client: &Client,
     ws_client: &mut WSWriter,
-    token: &str,
-    client_id: &str,
+    headers: &HttpHeaders,
     sender: &Sender<Command>,
     reconnecting: bool,
-) -> Option<MessageResponse> {
+) -> MessageResponse {
     match m {
         Message::Text(msg) => {
-            let msg: GeneralMessage =
-                serde_json::from_str(&msg).expect("Could not parse message from ws");
-            debug!("{:?}", msg);
-            match msg.metadata.message_type {
-                MessageType::Welcome => {
-                    if reconnecting {
-                        return Some(MessageResponse::ConnectionSucessful);
-                    }
-
-                    let m = WelcomeMessage::from(msg.payload);
-
-                    for id in broadcasters_ids.iter() {
-                        let res = http_client
-                            .post("https://api.twitch.tv/helix/eventsub/subscriptions")
-                            .bearer_auth(token.clone())
-                            .header("Client-Id", client_id.clone())
-                            .json(&RequestBody {
-                                sub_type: "stream.online".to_string(),
-                                version: "1".to_string(),
-                                condition: Condition {
-                                    broadcaster_user_id: id.clone(),
-                                },
-                                transport: Transport {
-                                    method: "websocket".to_string(),
-                                    session_id: m.session.id.clone(),
-                                },
-                            })
-                            .send()
-                            .await
-                            .expect("Error sending event subscription request");
-
-                        if res.status() == StatusCode::ACCEPTED {
-                            info!("Accepted stream.online permission for {}", id)
-                        } else {
-                            error!("Error getting the stream.online sub")
-                        }
-
-                        let res = http_client
-                            .post("https://api.twitch.tv/helix/eventsub/subscriptions")
-                            .bearer_auth(token.clone())
-                            .header("Client-Id", client_id.clone())
-                            .json(&RequestBody {
-                                sub_type: "stream.offline".to_string(),
-                                version: "1".to_string(),
-                                condition: Condition {
-                                    broadcaster_user_id: id.clone(),
-                                },
-                                transport: Transport {
-                                    method: "websocket".to_string(),
-                                    session_id: m.session.id.clone(),
-                                },
-                            })
-                            .send()
-                            .await
-                            .expect("Error sending event subscription request");
-
-                        if res.status() == StatusCode::ACCEPTED {
-                            info!("Accepted stream.offline permission for {}", id)
-                        } else {
-                            error!("Error getting the stream.offline sub")
-                        }
-                    }
-
-                    return Some(MessageResponse::ConnectionSucessful);
-                }
-                MessageType::KeepAlive => {}
-                MessageType::Notification => {
-                    let m = NotificationMessage::from(msg.payload);
-                    let (tx, rx) = oneshot::channel();
-                    let val = m.event.online_type.is_some();
-                    info!(
-                        "Sending {} to channel {}",
-                        m.event.broadcaster_user_name, val
-                    );
-                    let cmd = Command::SetChannelStatus {
-                        key: m.event.broadcaster_user_name.clone(),
-                        val,
-                        resp: tx,
-                    };
-                    let _ = sender.send(cmd).await;
-                    assert_eq!(rx.await.unwrap(), ());
-                    if val {
-                        let (tx, rx) = oneshot::channel();
-                        info!(
-                            "Reseting autoso status for channel {}",
-                            m.event.broadcaster_user_name
-                        );
-                        let cmd = Command::ResetSoStatus {
-                            channel: m.event.broadcaster_user_name,
-                            resp: tx,
-                        };
-                        let _ = sender.send(cmd).await;
-                        assert_eq!(rx.await.unwrap(), ())
-                    }
-                }
-                MessageType::Reconnect => {
-                    let m = ReconnectMessage::from(msg.payload);
-                    error!("Should reconnect");
-                    return Some(MessageResponse::Reconnect(
-                        m.session.reconnect_url.expect("There was no reconnect url"),
-                    ));
-                }
-                MessageType::Revocation => {}
-            }
+            process_text_message(
+                broadcasters_ids,
+                http_client,
+                headers,
+                sender,
+                reconnecting,
+                &msg,
+            )
+            .await;
         }
         Message::Close(_) => {
             error!("Closing connection");
@@ -189,12 +214,14 @@ async fn process_message(
         }
         _ => {}
     }
-    return None;
+    return Continue;
 }
 
 pub fn create_event_loop(conf: &BotConfig, sender: Sender<Command>) -> JoinHandle<()> {
-    let token = conf.oauth_token.clone();
-    let client_id = conf.client_id.clone();
+    let headers = HttpHeaders {
+        token: conf.oauth_token.clone(),
+        client_id: conf.client_id.clone(),
+    };
     let user_query = conf
         .channels
         .iter()
@@ -205,8 +232,8 @@ pub fn create_event_loop(conf: &BotConfig, sender: Sender<Command>) -> JoinHandl
         let http_client = Client::new();
         let res = http_client
             .get("https://api.twitch.tv/helix/users")
-            .bearer_auth(token.clone())
-            .header("Client-Id", client_id.clone())
+            .bearer_auth(headers.token.clone())
+            .header("Client-Id", headers.client_id.clone())
             .query(&user_query)
             .send()
             .await
@@ -236,27 +263,22 @@ pub fn create_event_loop(conf: &BotConfig, sender: Sender<Command>) -> JoinHandl
                     &broadcasters_ids,
                     &http_client,
                     &mut ws_write,
-                    &token,
-                    &client_id,
+                    &headers,
                     &sender,
                     last_client.is_some(),
                 )
                 .await;
                 match rec {
-                    None => {}
-                    Some(resp) => match resp {
-                        MessageResponse::ConnectionSucessful => match last_client {
-                            None => {}
-                            Some((mut old_w, _)) => {
-                                let _ = old_w.close();
-                                last_client = None;
-                            }
-                        },
-                        MessageResponse::Reconnect(reconnect_url) => {
-                            address = reconnect_url;
-                            break;
-                        }
-                    },
+                    MessageResponse::ConnectionSucessful if last_client.is_some() => {
+                        let (mut old_w, _) = last_client.unwrap();
+                        let _ = old_w.close();
+                        last_client = None;
+                    }
+                    MessageResponse::Reconnect(reconnect_url) => {
+                        address = reconnect_url;
+                        break;
+                    }
+                    _ => {}
                 }
             }
             last_client = Some((ws_write, ws_read));

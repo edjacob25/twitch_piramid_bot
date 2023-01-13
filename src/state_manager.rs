@@ -49,6 +49,81 @@ struct ChannelData {
     user_login: String,
 }
 
+fn process_command(cmd: Command) {
+    use Command::*;
+    match cmd {
+        GetChannelStatus { key, resp } => {
+            let db = DB::open_default("online.db").unwrap();
+            let res = match db.get(&key) {
+                Ok(Some(values)) => {
+                    let val = *values.first().expect("No bytes retrieved");
+                    val > 0
+                }
+                Ok(None) => false,
+                Err(_) => false,
+            };
+            debug!("Channel {} online status: {}", key, res);
+            let _ = resp.send(res);
+        }
+        SetChannelStatus { key, val, resp } => {
+            let db = DB::open_default("online.db").unwrap();
+            debug!("Setting channel {} online status: {}", key, val);
+            let savable = if val { vec![1] } else { vec![0] };
+            db.put(key, savable).expect("Cannot set online status");
+            resp.send(()).expect("Cannot callback");
+        }
+        GetSoStatus {
+            channel,
+            so_channel,
+            resp,
+        } => {
+            let db = DB::open_default("autoso.db").unwrap();
+            let key = format!("{} {}", channel, so_channel);
+            let res = match db.get(&key) {
+                Ok(Some(values)) => {
+                    let val = *values.first().expect("No bytes retrieved");
+                    val > 0
+                }
+                Ok(None) => {
+                    db.put(&key, vec![0]).expect("Could not create db row");
+                    false
+                }
+                Err(_) => false,
+            };
+            debug!(
+                "In channel {}, so_channel {} has status: {}",
+                channel, so_channel, res
+            );
+            let _ = resp.send(res);
+        }
+        SetSoStatus {
+            channel,
+            so_channel,
+            val,
+            resp,
+        } => {
+            let db = DB::open_default("autoso.db").unwrap();
+            let key = format!("{} {}", channel, so_channel);
+            let savable = if val { vec![1] } else { vec![0] };
+            db.put(key, savable).expect("Cannot set online status");
+            resp.send(()).expect("Cannot callback");
+        }
+        ResetSoStatus { channel, resp } => {
+            let db = DB::open_default("autoso.db").unwrap();
+            let it = db.iterator(IteratorMode::From(channel.as_ref(), Forward));
+            for v in it {
+                let (key, _) = v.expect("Error reading db");
+                let key = String::from_utf8(key.into_vec()).unwrap();
+                if !key.starts_with(&channel) {
+                    break;
+                }
+                db.put(key, vec![0]).expect("Could not set row to false ");
+            }
+            resp.send(()).expect("Cannot callback");
+        }
+    }
+}
+
 pub fn create_manager(conf: &BotConfig, mut receiver: Receiver<Command>) -> JoinHandle<()> {
     let channel_names = conf
         .channels
@@ -92,78 +167,7 @@ pub fn create_manager(conf: &BotConfig, mut receiver: Receiver<Command>) -> Join
         }
         drop(db);
         while let Some(cmd) = receiver.recv().await {
-            use Command::*;
-            match cmd {
-                GetChannelStatus { key, resp } => {
-                    let db = DB::open_default("online.db").unwrap();
-                    let res = match db.get(&key) {
-                        Ok(Some(values)) => {
-                            let val = *values.first().expect("No bytes retrieved");
-                            val > 0
-                        }
-                        Ok(None) => false,
-                        Err(_) => false,
-                    };
-                    debug!("Channel {} online status: {}", key, res);
-                    let _ = resp.send(res);
-                }
-                SetChannelStatus { key, val, resp } => {
-                    let db = DB::open_default("online.db").unwrap();
-                    debug!("Setting channel {} online status: {}", key, res);
-                    let savable = if val { vec![1] } else { vec![0] };
-                    db.put(key, savable).expect("Cannot set online status");
-                    resp.send(()).expect("Cannot callback");
-                }
-                GetSoStatus {
-                    channel,
-                    so_channel,
-                    resp,
-                } => {
-                    let db = DB::open_default("autoso.db").unwrap();
-                    let key = format!("{} {}", channel, so_channel);
-                    let res = match db.get(&key) {
-                        Ok(Some(values)) => {
-                            let val = *values.first().expect("No bytes retrieved");
-                            val > 0
-                        }
-                        Ok(None) => {
-                            db.put(&key, vec![0]).expect("Could not create db row");
-                            false
-                        }
-                        Err(_) => false,
-                    };
-                    debug!(
-                        "In channel {}, so_channel {} has status: {}",
-                        channel, so_channel, res
-                    );
-                    let _ = resp.send(res);
-                }
-                SetSoStatus {
-                    channel,
-                    so_channel,
-                    val,
-                    resp,
-                } => {
-                    let db = DB::open_default("autoso.db").unwrap();
-                    let key = format!("{} {}", channel, so_channel);
-                    let savable = if val { vec![1] } else { vec![0] };
-                    db.put(key, savable).expect("Cannot set online status");
-                    resp.send(()).expect("Cannot callback");
-                }
-                ResetSoStatus { channel, resp } => {
-                    let db = DB::open_default("autoso.db").unwrap();
-                    let it = db.iterator(IteratorMode::From(channel.as_ref(), Forward));
-                    for v in it {
-                        let (key, _) = v.expect("Error reading db");
-                        let key = String::from_utf8(key.into_vec()).unwrap();
-                        if !key.starts_with(&channel) {
-                            break;
-                        }
-                        db.put(key, vec![0]).expect("Could not set row to false ");
-                    }
-                    resp.send(()).expect("Cannot callback");
-                }
-            }
+            process_command(cmd);
         }
     });
     handle
