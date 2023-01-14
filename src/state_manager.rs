@@ -4,6 +4,7 @@ use reqwest::Client;
 use rocksdb::Direction::Forward;
 use rocksdb::{IteratorMode, DB};
 use serde::Deserialize;
+use std::sync::Arc;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
@@ -53,7 +54,7 @@ fn process_command(cmd: Command) {
     use Command::*;
     match cmd {
         GetChannelStatus { key, resp } => {
-            let db = DB::open_default("online.db").unwrap();
+            let db = DB::open_default("online.db").expect("Could not open online.db");
             let res = match db.get(&key) {
                 Ok(Some(values)) => {
                     let val = *values.first().expect("No bytes retrieved");
@@ -66,7 +67,7 @@ fn process_command(cmd: Command) {
             let _ = resp.send(res);
         }
         SetChannelStatus { key, val, resp } => {
-            let db = DB::open_default("online.db").unwrap();
+            let db = DB::open_default("online.db").expect("Could not open online.db");
             debug!("Setting channel {} online status: {}", key, val);
             let savable = if val { vec![1] } else { vec![0] };
             db.put(key, savable).expect("Cannot set online status");
@@ -77,7 +78,7 @@ fn process_command(cmd: Command) {
             so_channel,
             resp,
         } => {
-            let db = DB::open_default("autoso.db").unwrap();
+            let db = DB::open_default("autoso.db").expect("Could not open autoso.db");
             let key = format!("{} {}", channel, so_channel);
             let res = match db.get(&key) {
                 Ok(Some(values)) => {
@@ -102,18 +103,18 @@ fn process_command(cmd: Command) {
             val,
             resp,
         } => {
-            let db = DB::open_default("autoso.db").unwrap();
+            let db = DB::open_default("autoso.db").expect("Could not open autoso.db");
             let key = format!("{} {}", channel, so_channel);
             let savable = if val { vec![1] } else { vec![0] };
             db.put(key, savable).expect("Cannot set online status");
             resp.send(()).expect("Cannot callback");
         }
         ResetSoStatus { channel, resp } => {
-            let db = DB::open_default("autoso.db").unwrap();
+            let db = DB::open_default("autoso.db").expect("Could not open autoso.db");
             let it = db.iterator(IteratorMode::From(channel.as_ref(), Forward));
             for v in it {
                 let (key, _) = v.expect("Error reading db");
-                let key = String::from_utf8(key.into_vec()).unwrap();
+                let key = String::from_utf8(key.into_vec()).expect("Could not parse key");
                 if !key.starts_with(&channel) {
                     break;
                 }
@@ -124,33 +125,29 @@ fn process_command(cmd: Command) {
     }
 }
 
-pub fn create_manager(conf: &BotConfig, mut receiver: Receiver<Command>) -> JoinHandle<()> {
-    let channel_names = conf
-        .channels
-        .iter()
-        .map(|c| c.channel_name.clone())
-        .collect::<Vec<_>>();
-
-    let token = conf.oauth_token.clone();
-    let client_id = conf.client_id.clone();
-    let user_query = channel_names
-        .iter()
-        .map(|c| ("user_login".to_string(), c.clone()))
-        .collect::<Vec<_>>();
-
-    let handle = tokio::spawn(async move {
+pub fn create_manager(conf: Arc<BotConfig>, mut receiver: Receiver<Command>) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let user_query = conf
+            .channels
+            .iter()
+            .map(|c| c.channel_name.as_str())
+            .map(|c| ("user_login", c))
+            .collect::<Vec<_>>();
         info!("Starting manager");
-        let db = DB::open_default("online.db").unwrap();
-        channel_names.iter().for_each(|channel| {
-            db.put(channel.clone(), vec![0]).expect("Could not set db");
-        });
+        let db = DB::open_default("online.db").expect("Could not open online.db");
+        conf.channels
+            .iter()
+            .map(|c| c.channel_name.as_str())
+            .for_each(|channel| {
+                db.put(channel, vec![0]).expect("Could not set db");
+            });
 
         let http_client = Client::new();
 
         let res = http_client
             .get("https://api.twitch.tv/helix/streams")
-            .bearer_auth(token.clone())
-            .header("Client-Id", client_id.clone())
+            .bearer_auth(conf.oauth_token.as_str())
+            .header("Client-Id", conf.client_id.as_str())
             .query(&user_query)
             .send()
             .await
@@ -166,9 +163,9 @@ pub fn create_manager(conf: &BotConfig, mut receiver: Receiver<Command>) -> Join
                 .expect("Could not put online channels");
         }
         drop(db);
+        info!("Starting to receive messages");
         while let Some(cmd) = receiver.recv().await {
             process_command(cmd);
         }
-    });
-    handle
+    })
 }

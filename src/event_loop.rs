@@ -1,14 +1,13 @@
 use crate::bot_config::BotConfig;
 use crate::event_loop::MessageResponse::Continue;
 use crate::state_manager::Command;
-use crate::twitch_ws::{
-    GeneralMessage, MessageType, NotificationMessage, ReconnectMessage, WelcomeMessage,
-};
+use crate::twitch_ws::*;
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
 use log::{debug, error, info};
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
@@ -68,19 +67,23 @@ enum MessageResponse {
 struct EventData<'a> {
     event: &'a str,
     broadcaster_id: &'a str,
-    session_id: String,
+    session_id: &'a str,
 }
 
-struct HttpHeaders {
-    token: String,
-    client_id: String,
+struct HttpHeaders<'a> {
+    token: &'a str,
+    client_id: &'a str,
 }
 
-async fn register_event(event_data: EventData<'_>, http_client: &Client, headers: &HttpHeaders) {
+async fn register_event(
+    event_data: EventData<'_>,
+    http_client: &Client,
+    headers: &HttpHeaders<'_>,
+) {
     let res = http_client
         .post("https://api.twitch.tv/helix/eventsub/subscriptions")
-        .bearer_auth(&(headers.token))
-        .header("Client-Id", &(headers.client_id))
+        .bearer_auth(headers.token)
+        .header("Client-Id", headers.client_id)
         .json(&RequestBody {
             sub_type: event_data.event.to_string(),
             version: "1".to_string(),
@@ -89,7 +92,7 @@ async fn register_event(event_data: EventData<'_>, http_client: &Client, headers
             },
             transport: Transport {
                 method: "websocket".to_string(),
-                session_id: event_data.session_id,
+                session_id: event_data.session_id.to_string(),
             },
         })
         .send()
@@ -102,14 +105,14 @@ async fn register_event(event_data: EventData<'_>, http_client: &Client, headers
             event_data.event, event_data.broadcaster_id
         )
     } else {
-        error!("Error getting the stream.online sub")
+        error!("Error getting the {} sub", event_data.event)
     }
 }
 
 async fn process_text_message(
     broadcasters_ids: &Vec<String>,
     http_client: &Client,
-    headers: &HttpHeaders,
+    headers: &HttpHeaders<'_>,
     sender: &Sender<Command>,
     reconnecting: bool,
     msg: &String,
@@ -128,14 +131,14 @@ async fn process_text_message(
                 let event_data = EventData {
                     event: "stream.online",
                     broadcaster_id: id,
-                    session_id: m.session.id.clone(),
+                    session_id: &m.session.id,
                 };
                 register_event(event_data, http_client, headers).await;
 
                 let event_data = EventData {
                     event: "stream.offline",
                     broadcaster_id: id,
-                    session_id: m.session.id.clone(),
+                    session_id: &m.session.id,
                 };
                 register_event(event_data, http_client, headers).await;
             }
@@ -146,31 +149,33 @@ async fn process_text_message(
         MessageType::Notification => {
             let m = NotificationMessage::from(msg.payload);
             let (tx, rx) = oneshot::channel();
-            let val = m.event.online_type.is_some();
-            info!(
-                "Sending {} to channel {}",
-                m.event.broadcaster_user_name, val
-            );
-            let cmd = Command::SetChannelStatus {
-                key: m.event.broadcaster_user_name.clone(),
-                val,
-                resp: tx,
-            };
-            let _ = sender.send(cmd).await;
-            assert_eq!(rx.await.unwrap(), ());
-            if val {
+            let starting_stream = m.event.online_type.is_some();
+
+            if starting_stream {
                 let (tx, rx) = oneshot::channel();
                 info!(
-                    "Reseting autoso status for channel {}",
+                    "Resetting autoso status for channel {}",
                     m.event.broadcaster_user_name
                 );
                 let cmd = Command::ResetSoStatus {
-                    channel: m.event.broadcaster_user_name,
+                    channel: m.event.broadcaster_user_name.clone(),
                     resp: tx,
                 };
                 let _ = sender.send(cmd).await;
                 assert_eq!(rx.await.unwrap(), ())
             }
+
+            info!(
+                "Sending {} to channel {}",
+                starting_stream, m.event.broadcaster_user_name,
+            );
+            let cmd = Command::SetChannelStatus {
+                key: m.event.broadcaster_user_name,
+                val: starting_stream,
+                resp: tx,
+            };
+            let _ = sender.send(cmd).await;
+            assert_eq!(rx.await.unwrap(), ());
         }
         MessageType::Reconnect => {
             let m = ReconnectMessage::from(msg.payload);
@@ -189,7 +194,7 @@ async fn process_message(
     broadcasters_ids: &Vec<String>,
     http_client: &Client,
     ws_client: &mut WSWriter,
-    headers: &HttpHeaders,
+    headers: &HttpHeaders<'_>,
     sender: &Sender<Command>,
     reconnecting: bool,
 ) -> MessageResponse {
@@ -217,23 +222,23 @@ async fn process_message(
     return Continue;
 }
 
-pub fn create_event_loop(conf: &BotConfig, sender: Sender<Command>) -> JoinHandle<()> {
-    let headers = HttpHeaders {
-        token: conf.oauth_token.clone(),
-        client_id: conf.client_id.clone(),
-    };
-    let user_query = conf
-        .channels
-        .iter()
-        .map(|c| ("login".to_string(), c.channel_name.clone()))
-        .collect::<Vec<_>>();
-
+pub fn create_event_loop(conf: Arc<BotConfig>, sender: Sender<Command>) -> JoinHandle<()> {
     tokio::spawn(async move {
+        let headers = HttpHeaders {
+            token: conf.oauth_token.as_str(),
+            client_id: conf.client_id.as_str(),
+        };
+        let user_query = conf
+            .channels
+            .iter()
+            .map(|c| ("login", c.channel_name.as_str()))
+            .collect::<Vec<_>>();
+
         let http_client = Client::new();
         let res = http_client
             .get("https://api.twitch.tv/helix/users")
-            .bearer_auth(headers.token.clone())
-            .header("Client-Id", headers.client_id.clone())
+            .bearer_auth(headers.token)
+            .header("Client-Id", headers.client_id)
             .query(&user_query)
             .send()
             .await
@@ -246,8 +251,8 @@ pub fn create_event_loop(conf: &BotConfig, sender: Sender<Command>) -> JoinHandl
             serde_json::from_str(&res).expect("Could not parse persons");
         let broadcasters_ids = persons_data
             .data
-            .iter()
-            .map(|p| p.id.clone())
+            .into_iter()
+            .map(|p| p.id)
             .collect::<Vec<_>>();
 
         let mut address = "wss://eventsub-beta.wss.twitch.tv/ws".to_string();

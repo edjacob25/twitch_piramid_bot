@@ -1,5 +1,6 @@
 use config::Config;
 use simple_logger::SimpleLogger;
+use std::sync::Arc;
 use tokio::sync::mpsc;
 use twitch_irc::login::StaticLoginCredentials;
 use twitch_irc::ClientConfig;
@@ -12,7 +13,10 @@ use twitch_piramid_bot::state_manager::create_manager;
 
 #[tokio::main]
 pub async fn main() {
-    SimpleLogger::new().env().init().unwrap();
+    SimpleLogger::new()
+        .env()
+        .init()
+        .expect("Could not init logger");
     let settings = Config::builder()
         .add_source(config::File::with_name("settings.toml"))
         .build()
@@ -31,14 +35,15 @@ pub async fn main() {
     //client.send_message(IRCMessage::parse("CAP REQ :twitch.tv/commands twitch.tv/tags").unwrap());
 
     let (tx, rx) = mpsc::channel(32);
-    let _manager = create_manager(&conf, rx);
-    let _event_loop = create_event_loop(&conf, tx.clone());
+    let conf = Arc::new(conf);
+    let _manager = create_manager(conf.clone(), rx);
+    let _event_loop = create_event_loop(conf.clone(), tx.clone());
     let join_handle = message_loop(&conf, incoming_messages, client.clone(), tx.clone());
 
     for channel_to_connect in &conf.channels {
         client
             .join(channel_to_connect.channel_name.clone())
-            .unwrap();
+            .expect("Could not connect to a channel");
     }
 
     // keep the tokio executor alive.
