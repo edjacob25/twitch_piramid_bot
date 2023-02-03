@@ -1,4 +1,4 @@
-use crate::bot_config::BotConfig;
+use crate::bot_config::{BotConfig, Ntfy};
 use crate::event_loop::MessageResponse::Continue;
 use crate::state_manager::Command;
 use crate::twitch_ws::*;
@@ -116,6 +116,7 @@ async fn process_text_message(
     sender: &Sender<Command>,
     reconnecting: bool,
     msg: &String,
+    ntfy: &Option<Ntfy>,
 ) -> MessageResponse {
     let msg: GeneralMessage = serde_json::from_str(&msg).expect("Could not parse message from ws");
     debug!("{:?}", msg);
@@ -160,6 +161,21 @@ async fn process_text_message(
             if m.event.title.is_some() {
                 let msg = format!("Stream {} is changing info, title is {} ", m.event.broadcaster_user_name, m.event.title.unwrap());
                 info!("{}", msg);
+                if ntfy.is_some() {
+                    let nt = ntfy.as_ref().unwrap().clone();
+                    let address = format!("https://www.twitch.tv/{}",m.event.broadcaster_user_login);
+                    tokio::spawn(async move {
+                        let cl = Client::new();
+                        let _res = cl
+                            .post(nt.address)
+                            .basic_auth(nt.user,Some(nt.pass))
+                            .header("Click", address)
+                            .body(msg)
+                            .send()
+                            .await
+                            .expect("Could not reach ntfy server");
+                    });
+                }
                 return Continue;
             }
 
@@ -176,7 +192,23 @@ async fn process_text_message(
                     resp: tx,
                 };
                 let _ = sender.send(cmd).await;
-                assert_eq!(rx.await.unwrap(), ())
+                assert_eq!(rx.await.unwrap(), ());
+
+                if ntfy.is_some() {
+                    let nt = ntfy.as_ref().unwrap().clone();
+                    let address = format!("https://www.twitch.tv/{}",m.event.broadcaster_user_login);
+                    tokio::spawn(async move {
+                        let cl = Client::new();
+                        let _res = cl
+                            .post(nt.address)
+                            .basic_auth(nt.user,Some(nt.pass))
+                            .header("Click", address)
+                            .body("Stream starting")
+                            .send()
+                            .await
+                            .expect("Could not reach twitch api users");
+                    });
+                }
             }
 
             info!(
@@ -212,6 +244,7 @@ async fn process_message(
     headers: &HttpHeaders<'_>,
     sender: &Sender<Command>,
     reconnecting: bool,
+    ntfy: &Option<Ntfy>
 ) -> MessageResponse {
     match m {
         Message::Text(msg) => {
@@ -222,10 +255,29 @@ async fn process_message(
                 sender,
                 reconnecting,
                 &msg,
+                ntfy,
             )
             .await;
         }
-        Message::Close(_) => {
+        Message::Close(close) => {
+            match close {
+                None => {}
+                Some(c) => {
+                    error!("Closing reason {}", c);
+                }
+            }
+            let _ = ws_client.close();
+
+            if ntfy.is_some() {
+                let nt = ntfy.as_ref().unwrap();
+                let _res = http_client
+                    .post(&nt.address)
+                    .basic_auth(&nt.user,Some(&nt.pass))
+                    .body(format!("Closing connection"))
+                    .send()
+                    .await
+                    .expect("Could not reach ntfy server");
+            }
             error!("Closing connection");
         }
         Message::Ping(data) => {
@@ -287,6 +339,7 @@ pub fn create_event_loop(conf: Arc<BotConfig>, sender: Sender<Command>) -> JoinH
                     &headers,
                     &sender,
                     last_client.is_some(),
+                    &conf.ntfy
                 )
                 .await;
                 match rec {
