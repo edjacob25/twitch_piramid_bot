@@ -8,7 +8,7 @@ pub struct BotConfig {
     pub oauth_token: String,
     pub client_id: String,
     pub channels: Vec<ChannelConfig>,
-    pub ntfy: Option<Ntfy>
+    pub ntfy: Option<Ntfy>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -22,5 +22,5 @@ pub struct ChannelConfig {
 pub struct Ntfy {
     pub address: String,
     pub user: String,
-    pub pass: String
+    pub pass: String,
 }

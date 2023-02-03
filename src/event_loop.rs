@@ -110,12 +110,12 @@ async fn register_event(
 }
 
 async fn process_text_message(
+    msg: &String,
     broadcasters_ids: &Vec<String>,
     http_client: &Client,
     headers: &HttpHeaders<'_>,
     sender: &Sender<Command>,
     reconnecting: bool,
-    msg: &String,
     ntfy: &Option<Ntfy>,
 ) -> MessageResponse {
     let msg: GeneralMessage = serde_json::from_str(&msg).expect("Could not parse message from ws");
@@ -159,16 +159,21 @@ async fn process_text_message(
             let m = NotificationMessage::from(msg.payload);
 
             if m.event.title.is_some() {
-                let msg = format!("Stream {} is changing info, title is {} ", m.event.broadcaster_user_name, m.event.title.unwrap());
+                let msg = format!(
+                    "Stream {} is changing info, title is {} ",
+                    m.event.broadcaster_user_name,
+                    m.event.title.unwrap()
+                );
                 info!("{}", msg);
                 if ntfy.is_some() {
                     let nt = ntfy.as_ref().unwrap().clone();
-                    let address = format!("https://www.twitch.tv/{}",m.event.broadcaster_user_login);
+                    let address =
+                        format!("https://www.twitch.tv/{}", m.event.broadcaster_user_login);
                     tokio::spawn(async move {
                         let cl = Client::new();
                         let _res = cl
                             .post(nt.address)
-                            .basic_auth(nt.user,Some(nt.pass))
+                            .basic_auth(nt.user, Some(nt.pass))
                             .header("Click", address)
                             .body(msg)
                             .send()
@@ -196,12 +201,13 @@ async fn process_text_message(
 
                 if ntfy.is_some() {
                     let nt = ntfy.as_ref().unwrap().clone();
-                    let address = format!("https://www.twitch.tv/{}",m.event.broadcaster_user_login);
+                    let address =
+                        format!("https://www.twitch.tv/{}", m.event.broadcaster_user_login);
                     tokio::spawn(async move {
                         let cl = Client::new();
                         let _res = cl
                             .post(nt.address)
-                            .basic_auth(nt.user,Some(nt.pass))
+                            .basic_auth(nt.user, Some(nt.pass))
                             .header("Click", address)
                             .body("Stream starting")
                             .send()
@@ -244,17 +250,17 @@ async fn process_message(
     headers: &HttpHeaders<'_>,
     sender: &Sender<Command>,
     reconnecting: bool,
-    ntfy: &Option<Ntfy>
+    ntfy: &Option<Ntfy>,
 ) -> MessageResponse {
     match m {
         Message::Text(msg) => {
             return process_text_message(
+                &msg,
                 broadcasters_ids,
                 http_client,
                 headers,
                 sender,
                 reconnecting,
-                &msg,
                 ntfy,
             )
             .await;
@@ -272,7 +278,7 @@ async fn process_message(
                 let nt = ntfy.as_ref().unwrap();
                 let _res = http_client
                     .post(&nt.address)
-                    .basic_auth(&nt.user,Some(&nt.pass))
+                    .basic_auth(&nt.user, Some(&nt.pass))
                     .body(format!("Closing connection"))
                     .send()
                     .await
@@ -339,7 +345,7 @@ pub fn create_event_loop(conf: Arc<BotConfig>, sender: Sender<Command>) -> JoinH
                     &headers,
                     &sender,
                     last_client.is_some(),
-                    &conf.ntfy
+                    &conf.ntfy,
                 )
                 .await;
                 match rec {
