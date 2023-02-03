@@ -4,7 +4,7 @@ use crate::state_manager::Command;
 use crate::twitch_ws::*;
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -122,6 +122,7 @@ async fn process_text_message(
     match msg.metadata.message_type {
         MessageType::Welcome => {
             if reconnecting {
+                warn!("Reconnection successful");
                 return MessageResponse::ConnectionSucessful;
             }
 
@@ -200,7 +201,7 @@ async fn process_message(
 ) -> MessageResponse {
     match m {
         Message::Text(msg) => {
-            process_text_message(
+            return process_text_message(
                 broadcasters_ids,
                 http_client,
                 headers,
@@ -261,6 +262,7 @@ pub fn create_event_loop(conf: Arc<BotConfig>, sender: Sender<Command>) -> JoinH
             let (stream, _) = connect_async(&address)
                 .await
                 .expect("Could not connect to twitch");
+            info!("Connected to {}", address);
             let (mut ws_write, mut ws_read) = stream.split();
             while let Some(message) = ws_read.next().await {
                 let rec = process_message(
@@ -275,9 +277,12 @@ pub fn create_event_loop(conf: Arc<BotConfig>, sender: Sender<Command>) -> JoinH
                 .await;
                 match rec {
                     MessageResponse::ConnectionSucessful if last_client.is_some() => {
-                        let (mut old_w, _) = last_client.unwrap();
+                        warn!("Actually closing the connection");
+                        let (mut old_w, old_r) = last_client.unwrap();
                         let _ = old_w.close();
                         last_client = None;
+                        drop(old_w);
+                        drop(old_r);
                     }
                     MessageResponse::Reconnect(reconnect_url) => {
                         address = reconnect_url;
