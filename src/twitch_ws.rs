@@ -56,9 +56,15 @@ pub struct Event {
     pub broadcaster_user_id: String,
     pub broadcaster_user_login: String,
     pub broadcaster_user_name: String,
+    // Online notification fields
     #[serde(rename = "type")]
     pub online_type: Option<String>,
     pub started_at: Option<String>,
+    // Changed stream info fields
+    pub title: Option<String>,
+    pub language: Option<String>,
+    pub category_id: Option<String>,
+    pub category_name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

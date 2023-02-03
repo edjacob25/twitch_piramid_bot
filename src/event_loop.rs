@@ -142,6 +142,13 @@ async fn process_text_message(
                     session_id: &m.session.id,
                 };
                 register_event(event_data, http_client, headers).await;
+
+                let event_data = EventData {
+                    event: "channel.update",
+                    broadcaster_id: id,
+                    session_id: &m.session.id,
+                };
+                register_event(event_data, http_client, headers).await;
             }
 
             return MessageResponse::ConnectionSucessful;
@@ -149,7 +156,13 @@ async fn process_text_message(
         MessageType::KeepAlive => {}
         MessageType::Notification => {
             let m = NotificationMessage::from(msg.payload);
-            let (tx, rx) = oneshot::channel();
+
+            if m.event.title.is_some() {
+                let msg = format!("Stream {} is changing info, title is {} ", m.event.broadcaster_user_name, m.event.title.unwrap());
+                info!("{}", msg);
+                return Continue;
+            }
+
             let starting_stream = m.event.online_type.is_some();
 
             if starting_stream {
@@ -170,6 +183,7 @@ async fn process_text_message(
                 "Sending {} to channel {}",
                 starting_stream, m.event.broadcaster_user_name,
             );
+            let (tx, rx) = oneshot::channel();
             let cmd = Command::SetChannelStatus {
                 key: m.event.broadcaster_user_name,
                 val: starting_stream,
