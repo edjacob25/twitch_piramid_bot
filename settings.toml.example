@@ -1,7 +1,10 @@
 name = "username"
 oauth_token = "youreallylongtoken"
+client_id = "yourclientid"
 channels = [
     { channel_name = "list", permitted_actions = ["Ayy"] },
     { channel_name = "of", permitted_actions = ["Ayy", "PyramidInterference"] },
-    { channel_name = "channels", permitted_actions = ["Ayy", "PyramidInterference", "PyramidCounting"] },
+    { channel_name = "channels", permitted_actions = ["Ayy", "PyramidInterference", "AutoSO"], auto_so_channels = ["ChannelA", "ChannelB"] },
 ]
+# Optional
+ntfy = { address = "https://ntfyaddress.com/topic", user = "user", pass = "pass"}
