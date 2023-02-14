@@ -62,6 +62,7 @@ enum MessageResponse {
     ConnectionSucessful,
     Continue,
     Reconnect(String),
+    Close,
 }
 
 struct EventData<'a> {
@@ -270,21 +271,24 @@ async fn process_message(
                 None => {}
                 Some(c) => {
                     error!("Closing reason {}", c);
+                    if ntfy.is_some() {
+                        let nt = ntfy.as_ref().unwrap();
+                        let _res = http_client
+                            .post(&nt.address)
+                            .basic_auth(&nt.user, Some(&nt.pass))
+                            .body(format!("Closing connection: {:?}", c))
+                            .send()
+                            .await
+                            .expect("Could not reach ntfy server");
+                    }
+                    if c.reason.contains("4007") {
+                        warn!("WTF");
+                    }
                 }
             }
             let _ = ws_client.close();
-
-            if ntfy.is_some() {
-                let nt = ntfy.as_ref().unwrap();
-                let _res = http_client
-                    .post(&nt.address)
-                    .basic_auth(&nt.user, Some(&nt.pass))
-                    .body(format!("Closing connection"))
-                    .send()
-                    .await
-                    .expect("Could not reach ntfy server");
-            }
             error!("Closing connection");
+            return MessageResponse::Close;
         }
         Message::Ping(data) => {
             let pong = Message::Pong(data);
@@ -330,15 +334,33 @@ pub fn create_event_loop(conf: Arc<BotConfig>, sender: Sender<Command>) -> JoinH
 
         let mut address = "wss://eventsub-beta.wss.twitch.tv/ws".to_string();
         let mut last_client: Option<(WSWriter, WSReader)> = None;
-        loop {
+        'ws_creation: loop {
             let (stream, _) = connect_async(&address)
                 .await
                 .expect("Could not connect to twitch");
             info!("Connected to {}", address);
             let (mut ws_write, mut ws_read) = stream.split();
             while let Some(message) = ws_read.next().await {
+                let m = match message {
+                    Ok(m) => m,
+                    Err(e) => {
+                        if conf.ntfy.is_some() {
+                            let nt = conf.ntfy.as_ref().unwrap();
+                            let _res = http_client
+                                .post(&nt.address)
+                                .basic_auth(&nt.user, Some(&nt.pass))
+                                .body(format!("Could not receive message with error: {:?}", e))
+                                .send()
+                                .await
+                                .expect("Could not reach ntfy server");
+                        }
+                        error!("Could not receive message from ws: {:?}", e);
+                        continue;
+                    }
+                };
+
                 let rec = process_message(
-                    message.expect("Could not receive message from ws"),
+                    m,
                     &broadcasters_ids,
                     &http_client,
                     &mut ws_write,
@@ -350,7 +372,7 @@ pub fn create_event_loop(conf: Arc<BotConfig>, sender: Sender<Command>) -> JoinH
                 .await;
                 match rec {
                     MessageResponse::ConnectionSucessful if last_client.is_some() => {
-                        warn!("Actually closing the connection");
+                        warn!("Actually closing the old connection");
                         let (mut old_w, old_r) = last_client.unwrap();
                         let _ = old_w.close();
                         last_client = None;
@@ -360,6 +382,18 @@ pub fn create_event_loop(conf: Arc<BotConfig>, sender: Sender<Command>) -> JoinH
                     MessageResponse::Reconnect(reconnect_url) => {
                         address = reconnect_url;
                         break;
+                    }
+                    MessageResponse::Close => {
+                        warn!("Resetting connection to base level");
+                        address = "wss://eventsub-beta.wss.twitch.tv/ws".to_string();
+                        if last_client.is_some() {
+                            let (mut old_w, old_r) = last_client.unwrap();
+                            let _ = old_w.close();
+                            last_client = None;
+                            drop(old_w);
+                            drop(old_r);
+                        }
+                        continue 'ws_creation;
                     }
                     _ => {}
                 }
