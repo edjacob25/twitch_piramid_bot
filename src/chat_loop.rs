@@ -90,6 +90,7 @@ async fn do_pyramid_interference(
     combo: &ClientCombo,
     msg: &twitch_irc::message::PrivmsgMessage,
     pyramids: &mut PyramidData,
+    conf: &ChannelConfig,
 ) {
     let channel = msg.channel_login.as_str();
     let pyramid_building = pyramids.building_flags.get_mut(channel).unwrap();
@@ -120,7 +121,43 @@ async fn do_pyramid_interference(
             i if i == *emote_count - 1 => {
                 info!("Pyramid getting smaller");
                 *emote_count -= 1;
+
+                if conf.harder_pyramids.is_some()
+                    && conf
+                        .harder_pyramids
+                        .as_ref()
+                        .unwrap()
+                        .contains(&msg.sender.name)
+                    && *emote_count == 3
+                {
+                    let action: PyramidAction = rand::random();
+                    match action {
+                        PyramidAction::Destroy => {
+                            warn!("Taking it hard");
+                            say_rate_limited(&combo, &msg.channel_login, "No".to_string()).await;
+                        }
+                        _ => {}
+                    }
+                }
                 if *emote_count == 2 {
+                    if conf.easier_pyramids.is_some()
+                        && conf
+                            .easier_pyramids
+                            .as_ref()
+                            .unwrap()
+                            .contains(&msg.sender.name)
+                    {
+                        let rand: f32 = rand::random();
+                        match rand {
+                            g if g < 0.5 => {
+                                warn!("Taking it easy");
+                                *pyramid_building = false;
+                                return;
+                            }
+                            _ => {}
+                        }
+                    }
+
                     warn!("Time to strike");
                     do_pyramid_action(combo, channel, &emote).await;
                     *pyramid_building = false;
@@ -219,7 +256,7 @@ async fn process_twitch_message(
                         do_pyramid_counting(&combo, &msg, &sender).await;
                     }
                     ChatAction::PyramidInterference => {
-                        do_pyramid_interference(&combo, &msg, &mut pyramids).await;
+                        do_pyramid_interference(&combo, &msg, &mut pyramids, &channel_conf).await;
                     }
 
                     ChatAction::AutoSO => {

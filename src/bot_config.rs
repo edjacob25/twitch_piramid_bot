@@ -16,6 +16,8 @@ pub struct ChannelConfig {
     pub channel_name: String,
     pub permitted_actions: HashSet<ChatAction>,
     pub auto_so_channels: Option<HashSet<String>>,
+    pub harder_pyramids: Option<HashSet<String>>,
+    pub easier_pyramids: Option<HashSet<String>>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
