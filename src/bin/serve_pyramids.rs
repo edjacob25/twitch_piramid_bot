@@ -59,7 +59,7 @@ async fn serve() -> impl IntoResponse {
 }
 
 #[derive(Template)]
-#[template(path = "main.html")]
+#[template(path = "main.askama", escape = "html")]
 struct PyramidsTemplate {
     data: HashMap<String, Vec<(String, u32)>>,
 }
