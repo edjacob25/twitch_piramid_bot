@@ -166,8 +166,7 @@ async fn process_text_message(
                     m.event.title.unwrap()
                 );
                 info!("{}", msg);
-                if ntfy.is_some() {
-                    let nt = ntfy.as_ref().unwrap().clone();
+                if let Some(nt) = ntfy.clone() {
                     let address =
                         format!("https://www.twitch.tv/{}", m.event.broadcaster_user_login);
                     tokio::spawn(async move {
@@ -200,8 +199,7 @@ async fn process_text_message(
                 let _ = sender.send(cmd).await;
                 assert_eq!(rx.await.unwrap(), ());
 
-                if ntfy.is_some() {
-                    let nt = ntfy.as_ref().unwrap().clone();
+                if let Some(nt) = ntfy.clone() {
                     let address =
                         format!("https://www.twitch.tv/{}", m.event.broadcaster_user_login);
                     tokio::spawn(async move {
@@ -271,8 +269,7 @@ async fn process_message(
                 None => {}
                 Some(c) => {
                     error!("Closing reason {}", c);
-                    if ntfy.is_some() {
-                        let nt = ntfy.as_ref().unwrap();
+                    if let Some(nt) = ntfy {
                         let _res = http_client
                             .post(&nt.address)
                             .basic_auth(&nt.user, Some(&nt.pass))
@@ -344,8 +341,7 @@ pub fn create_event_loop(conf: Arc<BotConfig>, sender: Sender<Command>) -> JoinH
                 let m = match message {
                     Ok(m) => m,
                     Err(e) => {
-                        if conf.ntfy.is_some() {
-                            let nt = conf.ntfy.as_ref().unwrap();
+                        if let Some(nt) = &conf.ntfy {
                             let _res = http_client
                                 .post(&nt.address)
                                 .basic_auth(&nt.user, Some(&nt.pass))

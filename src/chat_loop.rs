@@ -54,36 +54,37 @@ async fn do_pyramid_counting(
     msg: &twitch_irc::message::PrivmsgMessage,
     sender: &Sender<Command>,
 ) {
-    if msg.sender.name == "StreamElements" && msg.message_text.contains("pirámide") {
-        let (tx, rx) = oneshot::channel();
-        let cmd = Command::GetChannelStatus {
-            key: msg.channel_login.clone(),
-            resp: tx,
-        };
-        let _ = sender.send(cmd).await;
-        let is_online = match rx.await {
-            Ok(res) => res,
-            Err(_) => false,
-        };
-
-        if !is_online {
-            return;
-        }
-
-        let as_vec = msg.message_text.split(" ").collect::<Vec<_>>();
-        let name = as_vec[as_vec.len() - 2];
-        let db = DB::open_default("pyramids.db").unwrap();
-        let combined = format!("{} {}", msg.channel_login, name);
-        let mut num: u32 = match db.get(combined.as_bytes()) {
-            Ok(Some(value)) => String::from_utf8(value).unwrap().parse().unwrap(),
-            Ok(None) => 0,
-            Err(_) => 0,
-        };
-        num += 1;
-        db.put(combined, format!("{}", num)).expect("Error with db");
-        let message = format!("{} lleva {} piramides", name, num);
-        say_rate_limited(combo, msg.channel_login.as_str(), message).await;
+    if msg.sender.name != "StreamElements" || !msg.message_text.contains("pirámide") {
+        return;
     }
+    let (tx, rx) = oneshot::channel();
+    let cmd = Command::GetChannelStatus {
+        key: msg.channel_login.clone(),
+        resp: tx,
+    };
+    let _ = sender.send(cmd).await;
+    let is_online = match rx.await {
+        Ok(res) => res,
+        Err(_) => false,
+    };
+
+    if !is_online {
+        return;
+    }
+
+    let as_vec = msg.message_text.split(" ").collect::<Vec<_>>();
+    let name = as_vec[as_vec.len() - 2];
+    let db = DB::open_default("pyramids.db").unwrap();
+    let combined = format!("{} {}", msg.channel_login, name);
+    let mut num: u32 = match db.get(combined.as_bytes()) {
+        Ok(Some(value)) => String::from_utf8(value).unwrap().parse().unwrap(),
+        Ok(None) => 0,
+        Err(_) => 0,
+    };
+    num += 1;
+    db.put(combined, format!("{}", num)).expect("Error with db");
+    let message = format!("{} lleva {} piramides", name, num);
+    say_rate_limited(combo, msg.channel_login.as_str(), message).await;
 }
 
 async fn do_pyramid_interference(
@@ -102,71 +103,55 @@ async fn do_pyramid_interference(
         *emote_count = 1;
         *emote = msg.message_text.clone();
         info!("Single word {}", *emote);
-    } else if *pyramid_building {
-        let num_of_matches = msg
-            .message_text
-            .match_indices(emote.as_str())
-            .collect::<Vec<_>>()
-            .len();
-        let num_of_words = msg.message_text.split(" ").collect::<Vec<_>>().len();
-        if num_of_words != num_of_matches {
-            *pyramid_building = false;
-            return;
-        }
-        match num_of_matches {
-            i if i == *emote_count + 1 => {
-                info!("Pyramid growing");
-                *emote_count += 1;
-            }
-            i if i == *emote_count - 1 => {
-                info!("Pyramid getting smaller");
-                *emote_count -= 1;
+        return;
+    }
+    if !*pyramid_building {
+        return;
+    }
 
-                if conf.harder_pyramids.is_some()
-                    && conf
-                        .harder_pyramids
-                        .as_ref()
-                        .unwrap()
-                        .contains(&msg.sender.name)
-                    && *emote_count == 3
+    let num_of_matches = msg
+        .message_text
+        .match_indices(emote.as_str())
+        .collect::<Vec<_>>()
+        .len();
+    let num_of_words = msg.message_text.split(" ").collect::<Vec<_>>().len();
+    if num_of_words != num_of_matches {
+        *pyramid_building = false;
+        return;
+    }
+    match num_of_matches {
+        i if i == *emote_count + 1 => {
+            info!("Pyramid growing");
+            *emote_count += 1;
+
+            if let Some(h) = conf.harder_pyramids.as_ref() {
+                if h.contains(&msg.sender.name) && *emote_count == 3 && rand::random::<f32>() < 0.5
                 {
-                    let action: PyramidAction = rand::random();
-                    match action {
-                        PyramidAction::Destroy => {
-                            warn!("Taking it hard");
-                            say_rate_limited(&combo, &msg.channel_login, "No".to_string()).await;
-                        }
-                        _ => {}
-                    }
-                }
-                if *emote_count == 2 {
-                    if conf.easier_pyramids.is_some()
-                        && conf
-                            .easier_pyramids
-                            .as_ref()
-                            .unwrap()
-                            .contains(&msg.sender.name)
-                    {
-                        let rand: f32 = rand::random();
-                        match rand {
-                            g if g < 0.5 => {
-                                warn!("Taking it easy");
-                                *pyramid_building = false;
-                                return;
-                            }
-                            _ => {}
-                        }
-                    }
-
-                    warn!("Time to strike");
-                    do_pyramid_action(combo, channel, &emote).await;
+                    warn!("Taking it hard");
+                    say_rate_limited(&combo, &msg.channel_login, "No".to_string()).await;
                     *pyramid_building = false;
                 }
             }
-            _ => *pyramid_building = false,
         }
-    } else {
-        *pyramid_building = false;
+        i if i == *emote_count - 1 => {
+            info!("Pyramid getting smaller");
+            *emote_count -= 1;
+            if *emote_count != 2 {
+                return;
+            }
+            *pyramid_building = false;
+
+            if let Some(h) = conf.easier_pyramids.as_ref() {
+                if h.contains(&msg.sender.name) && rand::random::<f32>() < 0.5 {
+                    warn!("Taking it easy");
+                    return;
+                }
+            }
+
+            warn!("Time to strike");
+            do_pyramid_action(combo, channel, &emote).await;
+        }
+        _ => *pyramid_building = false,
     }
 }
 
@@ -269,16 +254,18 @@ async fn process_twitch_message(
         ServerMessage::UserNotice(msg) => {
             let channel_conf = channel_confs.get(&msg.channel_login).unwrap();
 
-            if channel_conf.permitted_actions.contains(&ChatAction::GiveSO) {
-                if msg.event_id == "raid" {
-                    say_rate_limited(
-                        &combo,
-                        &msg.channel_login,
-                        format!("!so @{}", msg.sender.login),
-                    )
-                    .await;
-                }
+            if !channel_conf.permitted_actions.contains(&ChatAction::GiveSO) {
+                return;
             }
+            if msg.event_id != "raid" {
+                return;
+            }
+            say_rate_limited(
+                &combo,
+                &msg.channel_login,
+                format!("!so @{}", msg.sender.login),
+            )
+            .await;
             debug!("{:?}", msg)
         }
         _ => {
