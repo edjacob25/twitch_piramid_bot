@@ -329,7 +329,7 @@ pub fn create_event_loop(conf: Arc<BotConfig>, sender: Sender<Command>) -> JoinH
             .map(|p| p.id)
             .collect::<Vec<_>>();
 
-        let mut address = "wss://eventsub-beta.wss.twitch.tv/ws".to_string();
+        let mut address = "wss://eventsub.wss.twitch.tv/ws".to_string();
         let mut last_client: Option<(WSWriter, WSReader)> = None;
         'ws_creation: loop {
             let (stream, _) = connect_async(&address)
@@ -381,7 +381,7 @@ pub fn create_event_loop(conf: Arc<BotConfig>, sender: Sender<Command>) -> JoinH
                     }
                     MessageResponse::Close => {
                         warn!("Resetting connection to base level");
-                        address = "wss://eventsub-beta.wss.twitch.tv/ws".to_string();
+                        address = "wss://eventsub.wss.twitch.tv/ws".to_string();
                         if last_client.is_some() {
                             let (mut old_w, old_r) = last_client.unwrap();
                             let _ = old_w.close();
