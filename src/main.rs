@@ -1,8 +1,12 @@
 use config::Config;
 use simple_logger::SimpleLogger;
+use std::path::Path;
+use std::string;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use twitch_irc::login::{RefreshingLoginCredentials, StaticLoginCredentials, TokenStorage};
+use twitch_irc::login::{
+    GetAccessTokenResponse, RefreshingLoginCredentials, TokenStorage, UserAccessToken,
+};
 use twitch_irc::ClientConfig;
 use twitch_irc::SecureWSTransport;
 use twitch_irc::TwitchIRCClient;
@@ -27,6 +31,7 @@ pub async fn main() {
         .try_deserialize::<BotConfig>()
         .expect("Malformed config");
 
+    create_auth_file(&conf).await;
     let storage = CustomTokenStorage {
         location: conf.credentials_file.clone(),
     };
@@ -58,4 +63,66 @@ pub async fn main() {
     // keep the tokio executor alive.
     // If you return instead of waiting the background task will exit.
     join_handle.await.unwrap();
+}
+
+pub async fn create_auth_file(config: &BotConfig) {
+    let file_location = Path::new(&config.credentials_file);
+    if file_location.exists() {
+        return;
+    }
+
+    println!(
+        "No token file detected at {}, creating a new one",
+        config.credentials_file
+    );
+
+    let link = format!(
+        "
+    https://id.twitch.tv/oauth2/authorize\
+    ?response_type=code\
+    &client_id={}\
+    &redirect_uri=http://localhost:8000\
+    &scope=chat%3Aread+chat%3Aedit\
+    &state=c3ab8aa609ea11e793ae92361f002671
+    ",
+        config.client_id
+    );
+
+    println!(
+        "Please put this link in your browser, authorize and copy back the code: {}",
+        link
+    );
+    let mut code = string::String::new();
+    let _b = std::io::stdin()
+        .read_line(&mut code)
+        .expect("Error reading the line");
+    let code = code.trim();
+    let client = reqwest::Client::new();
+    let params = [
+        ("client_id", config.client_id.as_str()),
+        ("client_secret", config.client_secret.as_str()),
+        ("code", code),
+        ("grant_type", "authorization_code"),
+        ("redirect_uri", "http://localhost:8000"),
+    ];
+
+    let res = client
+        .post("https://id.twitch.tv/oauth2/token")
+        .form(&params)
+        .send()
+        .await
+        .expect("Could not reach oauth token endpoint");
+    let json_response = res.text().await.expect("Response was empty");
+    println!("Json {}", json_response);
+    let decoded_response: GetAccessTokenResponse =
+        serde_json::from_str(json_response.as_str()).expect("Could not deserialize into Response");
+    let user_access_token: UserAccessToken = UserAccessToken::from(decoded_response);
+
+    let mut storage = CustomTokenStorage {
+        location: config.credentials_file.clone(),
+    };
+    storage
+        .update_token(&user_access_token)
+        .await
+        .expect("Error writing token");
 }

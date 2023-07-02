@@ -16,7 +16,7 @@ use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use twitch_irc::client::TwitchIRCClient;
-use twitch_irc::login::{RefreshingLoginCredentials, StaticLoginCredentials};
+use twitch_irc::login::RefreshingLoginCredentials;
 use twitch_irc::message::ServerMessage;
 use twitch_irc::transport::websocket::SecureWSTransport;
 
