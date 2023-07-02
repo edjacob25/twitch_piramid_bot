@@ -1,8 +1,11 @@
 use async_trait::async_trait;
 use config::Config;
+use std::env;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use std::{env, fs};
+use std::fs::File;
+use std::io::Write;
+use std::path::Path;
 use twitch_irc::login::{TokenStorage, UserAccessToken};
 
 #[derive(Debug)]
@@ -14,8 +17,8 @@ pub enum LoadError {
 impl Display for LoadError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            LoadError::Io(e) => write! {f,"IO error: {} ", e},
-            LoadError::Deserialize(e) => write! {f,"Deserializing error: {} ", e},
+            LoadError::Io(e) => write!{f, "IO error: {} ", e},
+            LoadError::Deserialize(e) => write!{f, "Deserializing error: {} ", e},
         }
     }
 }
@@ -50,8 +53,8 @@ pub enum UpdateError {
 impl Display for UpdateError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            UpdateError::Io(e) => write! {f,"IO error: {} ", e},
-            UpdateError::Parsing(e) => write! {f, "Parsing error: {} ", e},
+            UpdateError::Io(e) => write!{f, "IO error: {} ", e},
+            UpdateError::Parsing(e) => write!{f, "Parsing error: {} ", e},
         }
     }
 }
@@ -84,7 +87,7 @@ pub struct CustomTokenStorage {
 
 #[async_trait]
 impl TokenStorage for CustomTokenStorage {
-    type LoadError = LoadError; // or some other error
+    type LoadError = LoadError;
     type UpdateError = UpdateError;
 
     async fn load_token(&mut self) -> Result<UserAccessToken, Self::LoadError> {
@@ -99,11 +102,14 @@ impl TokenStorage for CustomTokenStorage {
         // Called after the token was updated successfully, to save the new token.
         // After `update_token()` completes, the `load_token()` method should then return
         // that token for future invocations
-        let mut path = env::current_dir().unwrap();
-        path.push(&self.location);
-
+        let p = Path::new(&self.location);
         let toml_string = toml::to_string(token)?;
-        fs::write(path, toml_string)?;
+        let p = if p.is_absolute() {
+            p.to_path_buf()
+        } else {
+            env::current_dir()?.as_path().join(p)
+        };
+        File::create(p)?.write_all(toml_string.as_ref())?;
         Ok(())
     }
 }
