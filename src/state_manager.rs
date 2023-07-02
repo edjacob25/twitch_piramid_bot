@@ -1,4 +1,5 @@
 use crate::bot_config::BotConfig;
+use crate::bot_token_storage::CustomTokenStorage;
 use log::{debug, info};
 use reqwest::Client;
 use rocksdb::Direction::Forward;
@@ -8,6 +9,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
+use twitch_irc::login::TokenStorage;
 
 type Responder<T> = oneshot::Sender<T>;
 
@@ -143,10 +145,19 @@ pub fn create_manager(conf: Arc<BotConfig>, mut receiver: Receiver<Command>) -> 
             });
 
         let http_client = Client::new();
-
+        let mut storage = CustomTokenStorage {
+            location: conf.credentials_file.clone(),
+        };
         let res = http_client
             .get("https://api.twitch.tv/helix/streams")
-            .bearer_auth(conf.oauth_token.as_str())
+            .bearer_auth(
+                storage
+                    .load_token()
+                    .await
+                    .expect("Error Reading the credential file")
+                    .access_token
+                    .as_str(),
+            )
             .header("Client-Id", conf.client_id.as_str())
             .query(&user_query)
             .send()

@@ -2,11 +2,12 @@ use config::Config;
 use simple_logger::SimpleLogger;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use twitch_irc::login::StaticLoginCredentials;
+use twitch_irc::login::{RefreshingLoginCredentials, StaticLoginCredentials, TokenStorage};
 use twitch_irc::ClientConfig;
 use twitch_irc::SecureWSTransport;
 use twitch_irc::TwitchIRCClient;
 use twitch_piramid_bot::bot_config::BotConfig;
+use twitch_piramid_bot::bot_token_storage::CustomTokenStorage;
 use twitch_piramid_bot::chat_loop::message_loop;
 use twitch_piramid_bot::event_loop::create_event_loop;
 use twitch_piramid_bot::state_manager::create_manager;
@@ -26,12 +27,20 @@ pub async fn main() {
         .try_deserialize::<BotConfig>()
         .expect("Malformed config");
 
-    let twitch_config = ClientConfig::new_simple(StaticLoginCredentials::new(
-        conf.name.clone(),
-        Some(conf.oauth_token.clone()),
-    ));
-    let (incoming_messages, client) =
-        TwitchIRCClient::<SecureWSTransport, StaticLoginCredentials>::new(twitch_config);
+    let storage = CustomTokenStorage {
+        location: conf.credentials_file.clone(),
+    };
+    let credentials = RefreshingLoginCredentials::init(
+        conf.client_id.clone(),
+        conf.client_secret.clone(),
+        storage,
+    );
+
+    let twitch_config = ClientConfig::new_simple(credentials);
+    let (incoming_messages, client) = TwitchIRCClient::<
+        SecureWSTransport,
+        RefreshingLoginCredentials<CustomTokenStorage>,
+    >::new(twitch_config);
     //client.send_message(IRCMessage::parse("CAP REQ :twitch.tv/commands twitch.tv/tags").unwrap());
 
     let (tx, rx) = mpsc::channel(32);

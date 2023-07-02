@@ -1,4 +1,5 @@
 use crate::bot_config::{BotConfig, ChannelConfig};
+use crate::bot_token_storage::CustomTokenStorage;
 use crate::chat_action::ChatAction;
 use crate::pyramid_action::PyramidAction;
 use crate::state_manager::Command;
@@ -15,11 +16,12 @@ use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use twitch_irc::client::TwitchIRCClient;
-use twitch_irc::login::StaticLoginCredentials;
+use twitch_irc::login::{RefreshingLoginCredentials, StaticLoginCredentials};
 use twitch_irc::message::ServerMessage;
 use twitch_irc::transport::websocket::SecureWSTransport;
 
-type TwitchClient = TwitchIRCClient<SecureWSTransport, StaticLoginCredentials>;
+type TwitchClient =
+    TwitchIRCClient<SecureWSTransport, RefreshingLoginCredentials<CustomTokenStorage>>;
 type Limiter = RateLimiter<String, DefaultKeyedStateStore<String>, DefaultClock>;
 
 struct ClientCombo {

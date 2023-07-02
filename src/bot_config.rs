@@ -5,7 +5,8 @@ use std::collections::HashSet;
 #[derive(Debug, Deserialize)]
 pub struct BotConfig {
     pub name: String,
-    pub oauth_token: String,
+    pub credentials_file: String,
+    pub client_secret: String,
     pub client_id: String,
     pub channels: Vec<ChannelConfig>,
     pub ntfy: Option<Ntfy>,

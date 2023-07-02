@@ -1,4 +1,5 @@
 use crate::bot_config::{BotConfig, Ntfy};
+use crate::bot_token_storage::CustomTokenStorage;
 use crate::event_loop::MessageResponse::Continue;
 use crate::state_manager::Command;
 use crate::twitch_ws::*;
@@ -14,6 +15,7 @@ use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
+use twitch_irc::login::TokenStorage;
 
 #[derive(Debug, Serialize)]
 struct RequestBody {
@@ -298,8 +300,16 @@ async fn process_message(
 
 pub fn create_event_loop(conf: Arc<BotConfig>, sender: Sender<Command>) -> JoinHandle<()> {
     tokio::spawn(async move {
+        let mut storage = CustomTokenStorage {
+            location: conf.credentials_file.clone(),
+        };
+        let token = storage
+            .load_token()
+            .await
+            .expect("Error Reading the credential file")
+            .access_token;
         let headers = HttpHeaders {
-            token: conf.oauth_token.as_str(),
+            token: token.as_str(),
             client_id: conf.client_id.as_str(),
         };
         let user_query = conf
