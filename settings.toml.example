@@ -3,9 +3,9 @@ client_id = "yourclientid"
 client_secret = "yourclientsecret"
 credentials_file = "creds.toml"
 channels = [
-    { channel_name = "list", permitted_actions = ["Ayy"] },
-    { channel_name = "of", permitted_actions = ["Ayy", "PyramidInterference"], harder_pyramids = ["harder_username"], easier_pyramids = ["easier_username"] },
-    { channel_name = "channels", permitted_actions = ["Ayy", "PyramidInterference", "AutoSO"], auto_so_channels = ["ChannelA", "ChannelB"] },
+    { channel_name = "list", permitted_actions = ["RespondSomething"], automatic_responses= [{regex = "(?i)ayy", response = "lmao"}]},
+    { channel_name = "of", permitted_actions = ["PyramidInterference"], harder_pyramids = ["harder_username"], easier_pyramids = ["easier_username"] },
+    { channel_name = "channels", permitted_actions = ["PyramidInterference", "AutoSO"], auto_so_channels = ["ChannelA", "ChannelB"] },
 ]
 # Optional
 ntfy = { address = "https://ntfyaddress.com/topic", user = "user", pass = "pass"}

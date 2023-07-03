@@ -17,7 +17,7 @@ use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use twitch_irc::client::TwitchIRCClient;
 use twitch_irc::login::RefreshingLoginCredentials;
-use twitch_irc::message::ServerMessage;
+use twitch_irc::message::{ReplyToMessage, ServerMessage};
 use twitch_irc::transport::websocket::SecureWSTransport;
 
 type TwitchClient =
@@ -45,9 +45,19 @@ async fn say_rate_limited(combo: &ClientCombo, channel: &str, msg: String) {
     }
 }
 
-async fn do_ayy(combo: &ClientCombo, msg: &twitch_irc::message::PrivmsgMessage) {
-    if msg.message_text.to_lowercase().contains("ayy") {
-        say_rate_limited(combo, msg.channel_login.as_str(), "lmao".to_string()).await;
+async fn respond_something(
+    combo: &ClientCombo,
+    msg: &twitch_irc::message::PrivmsgMessage,
+    config: &ChannelConfig,
+) {
+    if let Some(c) = config.automatic_responses.as_ref() {
+        for pair in c {
+            let regex = &pair.regex;
+            let response = pair.response.clone();
+            if regex.is_match(msg.message_text.as_str()) {
+                say_rate_limited(combo, msg.channel_login(), response).await;
+            }
+        }
     }
 }
 
@@ -236,8 +246,8 @@ async fn process_twitch_message(
 
             for action in channel_conf.permitted_actions.iter() {
                 match action {
-                    ChatAction::Ayy => {
-                        do_ayy(&combo, &msg).await;
+                    ChatAction::RespondSomething => {
+                        respond_something(&combo, &msg, &channel_conf).await;
                     }
                     ChatAction::PyramidCounting => {
                         do_pyramid_counting(&combo, &msg, &sender).await;

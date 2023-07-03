@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 #[derive(Debug, Deserialize, Eq, PartialEq, Hash, Clone)]
 pub enum ChatAction {
-    Ayy,
+    RespondSomething,
     PyramidCounting,
     PyramidInterference,
     GiveSO,
@@ -15,7 +15,7 @@ impl FromStr for ChatAction {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "Ayy" => Ok(ChatAction::Ayy),
+            "RespondSomething" => Ok(ChatAction::RespondSomething),
             "PyramidCounting" => Ok(ChatAction::PyramidCounting),
             "PyramidInterference" => Ok(ChatAction::PyramidInterference),
             "GiveSO" => Ok(ChatAction::GiveSO),
