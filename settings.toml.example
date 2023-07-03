@@ -1,6 +1,7 @@
 name = "username"
-oauth_token = "youreallylongtoken"
 client_id = "yourclientid"
+client_secret = "yourclientsecret"
+credentials_file = "creds.toml"
 channels = [
     { channel_name = "list", permitted_actions = ["Ayy"] },
     { channel_name = "of", permitted_actions = ["Ayy", "PyramidInterference"], harder_pyramids = ["harder_username"], easier_pyramids = ["easier_username"] },
