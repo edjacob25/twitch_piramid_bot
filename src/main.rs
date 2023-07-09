@@ -5,7 +5,8 @@ use std::string;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use twitch_irc::login::{
-    GetAccessTokenResponse, RefreshingLoginCredentials, TokenStorage, UserAccessToken,
+    GetAccessTokenResponse, LoginCredentials, RefreshingLoginCredentials, TokenStorage,
+    UserAccessToken,
 };
 use twitch_irc::ClientConfig;
 use twitch_irc::SecureWSTransport;
@@ -40,6 +41,8 @@ pub async fn main() {
         conf.client_secret.clone(),
         storage,
     );
+
+    _ = credentials.get_credentials().await;
 
     let twitch_config = ClientConfig::new_simple(credentials);
     let (incoming_messages, client) = TwitchIRCClient::<
