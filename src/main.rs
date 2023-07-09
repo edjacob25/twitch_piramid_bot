@@ -1,7 +1,6 @@
 use config::Config;
 use simple_logger::SimpleLogger;
 use std::path::Path;
-use std::string;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use twitch_irc::login::{
@@ -24,13 +23,21 @@ pub async fn main() {
         .init()
         .expect("Could not init logger");
     let settings = Config::builder()
-        .add_source(config::File::with_name("settings.toml"))
+        .add_source(config::File::with_name("data/settings.toml"))
         .build()
         .expect("Need the config");
 
-    let conf = settings
+    let mut conf = settings
         .try_deserialize::<BotConfig>()
         .expect("Malformed config");
+
+    let auth_file_location = Path::new(&conf.credentials_file);
+    if auth_file_location.is_relative() {
+        conf = BotConfig {
+            credentials_file: format!("data/{}", conf.credentials_file),
+            ..conf
+        };
+    }
 
     create_auth_file(&conf).await;
     let storage = CustomTokenStorage {
@@ -95,7 +102,7 @@ pub async fn create_auth_file(config: &BotConfig) {
         "Please put this link in your browser, authorize and copy back the code: {}",
         link
     );
-    let mut code = string::String::new();
+    let mut code = String::new();
     let _b = std::io::stdin()
         .read_line(&mut code)
         .expect("Error reading the line");
