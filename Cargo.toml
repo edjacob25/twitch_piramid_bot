@@ -7,8 +7,8 @@ default-run = "twitch_piramid_bot"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-axum = "0.6.2"
-askama = "0.11"
+axum = {version = "0.6.2", optional = true }
+askama = {version = "0.11", optional = true }
 async-trait = "0.1.68"
 config = {version = "0.13.2", features = ["toml"]}
 governor = "0.5.1"
@@ -25,4 +25,11 @@ rocksdb = "0.19.0"
 tokio = { version = "1", features = ["rt-multi-thread"] }
 toml = "0.5.9"
 twitch-irc = { version = "5.0.0", features = ["transport-ws-native-tls", "refreshing-token-native-tls"] }
-tokio-tungstenite = { version = "0.18.0", features = ["native-tls"] }
+tokio-tungstenite = { version = "0.17.2", features = ["native-tls"] }
+
+[features]
+web = ["axum", "askama"]
+
+[[bin]]
+name = "serve_pyramids"
+required-features = ["web"]
