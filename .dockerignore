@@ -1,0 +1,7 @@
+.idea/
+.fleet/
+data/
+*.sqlite
+target/
+*.db/
+*.example
