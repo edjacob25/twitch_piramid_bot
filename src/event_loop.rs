@@ -71,6 +71,7 @@ struct EventData<'a> {
     event: &'a str,
     broadcaster_id: &'a str,
     session_id: &'a str,
+    name: &'a str,
 }
 
 struct HttpHeaders<'a> {
@@ -105,16 +106,22 @@ async fn register_event(
     if res.status() == StatusCode::ACCEPTED {
         info!(
             "Accepted {} permission for {}",
-            event_data.event, event_data.broadcaster_id
+            event_data.event, event_data.name
         )
     } else {
-        error!("Error getting the {} sub", event_data.event)
+        error!(
+            "Error getting the {} sub for channel {}: Code: {} - {}",
+            event_data.event,
+            event_data.name,
+            res.status(),
+            res.text().await.unwrap_or("Unknown error".to_string())
+        )
     }
 }
 
 async fn process_text_message(
     msg: &String,
-    broadcasters_ids: &Vec<String>,
+    broadcasters_ids: &Vec<(String, String)>,
     http_client: &Client,
     headers: &HttpHeaders<'_>,
     sender: &Sender<Command>,
@@ -132,10 +139,11 @@ async fn process_text_message(
 
             let m = WelcomeMessage::from(msg.payload);
 
-            for id in broadcasters_ids.iter() {
+            for (id, name) in broadcasters_ids.iter() {
                 let event_data = EventData {
                     event: "stream.online",
                     broadcaster_id: id,
+                    name,
                     session_id: &m.session.id,
                 };
                 register_event(event_data, http_client, headers).await;
@@ -143,6 +151,7 @@ async fn process_text_message(
                 let event_data = EventData {
                     event: "stream.offline",
                     broadcaster_id: id,
+                    name,
                     session_id: &m.session.id,
                 };
                 register_event(event_data, http_client, headers).await;
@@ -150,6 +159,7 @@ async fn process_text_message(
                 let event_data = EventData {
                     event: "channel.update",
                     broadcaster_id: id,
+                    name,
                     session_id: &m.session.id,
                 };
                 register_event(event_data, http_client, headers).await;
@@ -245,7 +255,7 @@ async fn process_text_message(
 
 async fn process_message(
     m: Message,
-    broadcasters_ids: &Vec<String>,
+    broadcasters_ids: &Vec<(String, String)>,
     http_client: &Client,
     ws_client: &mut WSWriter,
     headers: &HttpHeaders<'_>,
@@ -336,7 +346,7 @@ pub fn create_event_loop(conf: Arc<BotConfig>, sender: Sender<Command>) -> JoinH
         let broadcasters_ids = persons_data
             .data
             .into_iter()
-            .map(|p| p.id)
+            .map(|p| (p.id, p.display_name))
             .collect::<Vec<_>>();
 
         let mut address = "wss://eventsub.wss.twitch.tv/ws".to_string();
