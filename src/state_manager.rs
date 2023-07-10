@@ -56,7 +56,7 @@ fn process_command(cmd: Command) {
     use Command::*;
     match cmd {
         GetChannelStatus { key, resp } => {
-            let db = DB::open_default("online.db").expect("Could not open online.db");
+            let db = DB::open_default("data/online.db").expect("Could not open online.db");
             let res = match db.get(&key) {
                 Ok(Some(values)) => {
                     let val = *values.first().expect("No bytes retrieved");
@@ -69,7 +69,7 @@ fn process_command(cmd: Command) {
             let _ = resp.send(res);
         }
         SetChannelStatus { key, val, resp } => {
-            let db = DB::open_default("online.db").expect("Could not open online.db");
+            let db = DB::open_default("data/online.db").expect("Could not open online.db");
             debug!("Setting channel {} online status: {}", key, val);
             let savable = if val { vec![1] } else { vec![0] };
             db.put(key, savable).expect("Cannot set online status");
@@ -80,7 +80,7 @@ fn process_command(cmd: Command) {
             so_channel,
             resp,
         } => {
-            let db = DB::open_default("autoso.db").expect("Could not open autoso.db");
+            let db = DB::open_default("data/autoso.db").expect("Could not open autoso.db");
             let key = format!("{} {}", channel, so_channel);
             let res = match db.get(&key) {
                 Ok(Some(values)) => {
@@ -105,14 +105,14 @@ fn process_command(cmd: Command) {
             val,
             resp,
         } => {
-            let db = DB::open_default("autoso.db").expect("Could not open autoso.db");
+            let db = DB::open_default("data/autoso.db").expect("Could not open autoso.db");
             let key = format!("{} {}", channel, so_channel);
             let savable = if val { vec![1] } else { vec![0] };
             db.put(key, savable).expect("Cannot set online status");
             resp.send(()).expect("Cannot callback");
         }
         ResetSoStatus { channel, resp } => {
-            let db = DB::open_default("autoso.db").expect("Could not open autoso.db");
+            let db = DB::open_default("data/autoso.db").expect("Could not open autoso.db");
             let it = db.iterator(IteratorMode::From(channel.as_ref(), Forward));
             for v in it {
                 let (key, _) = v.expect("Error reading db");
@@ -136,7 +136,7 @@ pub fn create_manager(conf: Arc<BotConfig>, mut receiver: Receiver<Command>) -> 
             .map(|c| ("user_login", c))
             .collect::<Vec<_>>();
         info!("Starting manager");
-        let db = DB::open_default("online.db").expect("Could not open online.db");
+        let db = DB::open_default("data/online.db").expect("Could not open online.db");
         conf.channels
             .iter()
             .map(|c| c.channel_name.as_str())

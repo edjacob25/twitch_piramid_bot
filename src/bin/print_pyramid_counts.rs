@@ -5,7 +5,7 @@ extern crate twitch_piramid_bot;
 #[allow(dead_code)]
 fn check_all_column_names() {
     let settings = Config::builder()
-        .add_source(config::File::with_name("settings.toml"))
+        .add_source(config::File::with_name("data/settings.toml"))
         .build()
         .expect("Need the config");
 
@@ -35,7 +35,7 @@ fn check_all_column_names() {
 }
 
 fn main() {
-    let db = DB::open_default("pyramids.db").unwrap();
+    let db = DB::open_default("data/pyramids.db").unwrap();
     let mut last = String::new();
     for item in db.iterator(IteratorMode::Start) {
         let (key, value) = item.unwrap();

@@ -25,7 +25,7 @@ async fn main() {
 }
 
 async fn serve() -> impl IntoResponse {
-    let db = DB::open_default("pyramids.db").unwrap();
+    let db = DB::open_default("data/pyramids.db").unwrap();
     let mut last = String::new();
     let mut data = HashMap::new();
     let mut channel_data: Vec<(String, u32)> = Vec::new();
