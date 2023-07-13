@@ -15,7 +15,7 @@ use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
-use twitch_irc::login::TokenStorage;
+use twitch_irc::login::{LoginCredentials, RefreshingLoginCredentials, TokenStorage};
 
 #[derive(Debug, Serialize)]
 struct RequestBody {
@@ -75,7 +75,7 @@ struct EventData<'a> {
 }
 
 struct HttpHeaders<'a> {
-    token: &'a str,
+    token: String,
     client_id: &'a str,
 }
 
@@ -86,7 +86,7 @@ async fn register_event(
 ) {
     let res = http_client
         .post("https://api.twitch.tv/helix/eventsub/subscriptions")
-        .bearer_auth(headers.token)
+        .bearer_auth(headers.token.as_str())
         .header("Client-Id", headers.client_id)
         .json(&RequestBody {
             sub_type: event_data.event.to_string(),
@@ -318,8 +318,8 @@ pub fn create_event_loop(conf: Arc<BotConfig>, sender: Sender<Command>) -> JoinH
             .await
             .expect("Error Reading the credential file")
             .access_token;
-        let headers = HttpHeaders {
-            token: token.as_str(),
+        let mut headers = HttpHeaders {
+            token,
             client_id: conf.client_id.as_str(),
         };
         let user_query = conf
@@ -331,7 +331,7 @@ pub fn create_event_loop(conf: Arc<BotConfig>, sender: Sender<Command>) -> JoinH
         let http_client = Client::new();
         let res = http_client
             .get("https://api.twitch.tv/helix/users")
-            .bearer_auth(headers.token)
+            .bearer_auth(headers.token.as_str())
             .header("Client-Id", headers.client_id)
             .query(&user_query)
             .send()
@@ -402,6 +402,14 @@ pub fn create_event_loop(conf: Arc<BotConfig>, sender: Sender<Command>) -> JoinH
                     MessageResponse::Close => {
                         warn!("Resetting connection to base level");
                         address = "wss://eventsub.wss.twitch.tv/ws".to_string();
+                        let credentials = RefreshingLoginCredentials::init(
+                            conf.client_id.clone(),
+                            conf.client_secret.clone(),
+                            CustomTokenStorage{ location: storage.location.clone()},
+                        );
+
+                        let c = credentials.get_credentials().await;
+                        headers.token = c.unwrap().token.unwrap();
                         if last_client.is_some() {
                             let (mut old_w, old_r) = last_client.unwrap();
                             let _ = old_w.close();
