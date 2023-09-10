@@ -119,6 +119,27 @@ async fn register_event(
     }
 }
 
+async fn send_notification(ntfy: &Option<Ntfy>, msg: String, login: Option<&str>) {
+    if let Some(nt) = ntfy.clone() {
+        let address = if let Some(log) = login {
+            Some(format!("https://www.twitch.tv/{}", log))
+        } else {
+            None
+        };
+        tokio::spawn(async move {
+            let cl = Client::new();
+            let mut req = cl
+                .post(nt.address)
+                .basic_auth(nt.user, Some(nt.pass))
+                .body(msg);
+            if let Some(adr) = address {
+                req = req.header("Click", adr);
+            }
+            let _res = req.send().await.expect("Could not reach ntfy server");
+        });
+    }
+}
+
 async fn process_text_message(
     msg: &String,
     broadcasters_ids: &Vec<(String, String)>,
@@ -178,21 +199,7 @@ async fn process_text_message(
                     m.event.title.unwrap()
                 );
                 info!("{}", msg);
-                if let Some(nt) = ntfy.clone() {
-                    let address =
-                        format!("https://www.twitch.tv/{}", m.event.broadcaster_user_login);
-                    tokio::spawn(async move {
-                        let cl = Client::new();
-                        let _res = cl
-                            .post(nt.address)
-                            .basic_auth(nt.user, Some(nt.pass))
-                            .header("Click", address)
-                            .body(msg)
-                            .send()
-                            .await
-                            .expect("Could not reach ntfy server");
-                    });
-                }
+                send_notification(ntfy, msg, Some(&m.event.broadcaster_user_name)).await;
                 return Continue;
             }
 
@@ -211,21 +218,12 @@ async fn process_text_message(
                 let _ = sender.send(cmd).await;
                 assert_eq!(rx.await.unwrap(), ());
 
-                if let Some(nt) = ntfy.clone() {
-                    let address =
-                        format!("https://www.twitch.tv/{}", m.event.broadcaster_user_login);
-                    tokio::spawn(async move {
-                        let cl = Client::new();
-                        let _res = cl
-                            .post(nt.address)
-                            .basic_auth(nt.user, Some(nt.pass))
-                            .header("Click", address)
-                            .body("Stream starting")
-                            .send()
-                            .await
-                            .expect("Could not reach twitch api users");
-                    });
-                }
+                send_notification(
+                    ntfy,
+                    "Stream starting".to_string(),
+                    Some(&m.event.broadcaster_user_name),
+                )
+                .await;
             }
 
             info!(
@@ -281,15 +279,7 @@ async fn process_message(
                 None => {}
                 Some(c) => {
                     error!("Closing reason {}", c);
-                    if let Some(nt) = ntfy {
-                        let _res = http_client
-                            .post(&nt.address)
-                            .basic_auth(&nt.user, Some(&nt.pass))
-                            .body(format!("Closing connection: {:?}", c))
-                            .send()
-                            .await
-                            .expect("Could not reach ntfy server");
-                    }
+                    send_notification(ntfy, format!("Closing connection: {:?}", c), None).await;
                     if c.reason.contains("4007") {
                         warn!("WTF");
                     }
@@ -361,15 +351,12 @@ pub fn create_event_loop(conf: Arc<BotConfig>, sender: Sender<Command>) -> JoinH
                 let m = match message {
                     Ok(m) => m,
                     Err(e) => {
-                        if let Some(nt) = &conf.ntfy {
-                            let _res = http_client
-                                .post(&nt.address)
-                                .basic_auth(&nt.user, Some(&nt.pass))
-                                .body(format!("Could not receive message with error: {:?}", e))
-                                .send()
-                                .await
-                                .expect("Could not reach ntfy server");
-                        }
+                        send_notification(
+                            &conf.ntfy,
+                            format!("Could not receive message with error: {:?}", e),
+                            None,
+                        )
+                        .await;
                         error!("Could not receive message from ws: {:?}", e);
                         continue;
                     }
