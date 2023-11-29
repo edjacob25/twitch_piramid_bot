@@ -1,83 +1,19 @@
 use crate::bot_config::{BotConfig, Ntfy};
 use crate::bot_token_storage::CustomTokenStorage;
 use crate::event_loop::MessageResponse::Continue;
+use crate::event_data::*;
 use crate::state_manager::Command;
 use crate::twitch_ws::*;
-use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
 use log::{debug, error, info, warn};
 use reqwest::{Client, StatusCode};
-use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tokio::net::TcpStream;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
+use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
-use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 use twitch_irc::login::{LoginCredentials, RefreshingLoginCredentials, TokenStorage};
-
-#[derive(Debug, Serialize)]
-struct RequestBody {
-    #[serde(rename = "type")]
-    sub_type: String,
-    version: String,
-    condition: Condition,
-    transport: Transport,
-}
-
-#[derive(Debug, Serialize)]
-struct Condition {
-    broadcaster_user_id: String,
-}
-#[derive(Debug, Serialize)]
-struct Transport {
-    method: String,
-    session_id: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct UsersResponse {
-    data: Vec<UserData>,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Deserialize)]
-struct UserData {
-    id: String,
-    login: String,
-    display_name: String,
-    #[serde(rename = "type")]
-    user_type: String,
-    broadcaster_type: String,
-    description: String,
-    profile_image_url: String,
-    offline_image_url: String,
-    view_count: u32,
-    created_at: String,
-}
-
-type WSWriter = SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>;
-type WSReader = SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>;
-
-enum MessageResponse {
-    ConnectionSucessful,
-    Continue,
-    Reconnect(String),
-    Close,
-}
-
-struct EventData<'a> {
-    event: &'a str,
-    broadcaster_id: &'a str,
-    session_id: &'a str,
-    name: &'a str,
-}
-
-struct HttpHeaders<'a> {
-    token: String,
-    client_id: &'a str,
-}
 
 async fn register_event(
     event_data: EventData<'_>,
@@ -89,6 +25,7 @@ async fn register_event(
         .bearer_auth(headers.token.as_str())
         .header("Client-Id", headers.client_id)
         .json(&RequestBody {
+        .json(&EventRequestBody {
             sub_type: event_data.event.to_string(),
             version: "1".to_string(),
             condition: Condition {
@@ -248,7 +185,7 @@ async fn process_text_message(
         }
         MessageType::Revocation => {}
     }
-    return Continue;
+    return MessageResponse::Continue;
 }
 
 async fn process_message(
@@ -295,7 +232,7 @@ async fn process_message(
         }
         _ => {}
     }
-    return Continue;
+    return MessageResponse::Continue;
 }
 
 pub fn create_event_loop(conf: Arc<BotConfig>, sender: Sender<Command>) -> JoinHandle<()> {
@@ -392,7 +329,9 @@ pub fn create_event_loop(conf: Arc<BotConfig>, sender: Sender<Command>) -> JoinH
                         let credentials = RefreshingLoginCredentials::init(
                             conf.client_id.clone(),
                             conf.client_secret.clone(),
-                            CustomTokenStorage{ location: storage.location.clone()},
+                            CustomTokenStorage {
+                                location: storage.location.clone(),
+                            },
                         );
 
                         let c = credentials.get_credentials().await;
