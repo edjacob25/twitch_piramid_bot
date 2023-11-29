@@ -21,6 +21,7 @@ pub struct ChannelConfig {
     pub harder_pyramids: Option<HashSet<String>>,
     pub easier_pyramids: Option<HashSet<String>>,
     pub automatic_responses: Option<Vec<RegexPair>>,
+    pub prediction_monitoring: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Clone)]

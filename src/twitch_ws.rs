@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use serde;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
 #[serde(from = "String")]
@@ -31,7 +31,7 @@ pub struct Subscription {
     pub id: String,
     pub status: String,
     #[serde(rename = "type")]
-    pub sub_type: String,
+    pub sub_type: EventType,
     pub version: String,
     pub cost: u32,
     pub condition: Condition,
@@ -40,11 +40,37 @@ pub struct Subscription {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(from = "String")]
+pub enum EventType {
+    Online,
+    Offline,
+    StreamChange,
+    PredictionStart,
+    PredictionProgress,
+    PredictionEnd,
+    Other,
+}
+
+impl From<String> for EventType {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "stream.online" => EventType::Online,
+            "stream.offline" => EventType::Offline,
+            "channel.update" => EventType::StreamChange,
+            "channel.prediction.begin" => EventType::PredictionStart,
+            "channel.prediction.progress" => EventType::PredictionProgress,
+            "channel.prediction.end" => EventType::PredictionEnd,
+            _ => EventType::Other,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Condition {
     pub broadcaster_user_id: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Transport {
     pub method: String,
     pub session_id: String,
@@ -65,6 +91,27 @@ pub struct Event {
     pub language: Option<String>,
     pub category_id: Option<String>,
     pub category_name: Option<String>,
+    // Prediction fields
+    pub outcomes: Option<Vec<PollOption>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PollOption {
+    pub id: String,
+    pub title: String,
+    pub color: String,
+    pub users: u8,
+    pub channel_points: u32,
+    pub top_predictors: Vec<Predictor>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Predictor {
+    pub user_name: String,
+    pub user_login: String,
+    pub user_id: String,
+    pub channel_points_won: u32,
+    pub channel_points_used: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -120,11 +167,11 @@ pub struct NotificationMessage {
     pub event: Event,
 }
 
-impl From<Payload> for NotificationMessage {
-    fn from(a: Payload) -> Self {
+impl From<GeneralMessage> for NotificationMessage {
+    fn from(a: GeneralMessage) -> Self {
         NotificationMessage {
-            subscription: a.subscription.unwrap(),
-            event: a.event.unwrap(),
+            subscription: a.payload.subscription.unwrap(),
+            event: a.payload.event.unwrap(),
         }
     }
 }

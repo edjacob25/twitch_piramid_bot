@@ -1,6 +1,5 @@
-use crate::bot_config::{BotConfig, Ntfy};
+use crate::bot_config::{BotConfig, ChannelConfig, Ntfy};
 use crate::bot_token_storage::CustomTokenStorage;
-use crate::event_loop::MessageResponse::Continue;
 use crate::event_data::*;
 use crate::state_manager::Command;
 use crate::twitch_ws::*;
@@ -16,7 +15,7 @@ use tokio_tungstenite::tungstenite::Message;
 use twitch_irc::login::{LoginCredentials, RefreshingLoginCredentials, TokenStorage};
 
 async fn register_event(
-    event_data: EventData<'_>,
+    event_data: &EventData<'_>,
     http_client: &Client,
     headers: &HttpHeaders<'_>,
 ) {
@@ -24,7 +23,6 @@ async fn register_event(
         .post("https://api.twitch.tv/helix/eventsub/subscriptions")
         .bearer_auth(headers.token.as_str())
         .header("Client-Id", headers.client_id)
-        .json(&RequestBody {
         .json(&EventRequestBody {
             sub_type: event_data.event.to_string(),
             version: "1".to_string(),
@@ -84,7 +82,7 @@ async fn process_text_message(
     headers: &HttpHeaders<'_>,
     sender: &Sender<Command>,
     reconnecting: bool,
-    ntfy: &Option<Ntfy>,
+    config: &BotConfig,
 ) -> MessageResponse {
     let msg: GeneralMessage = serde_json::from_str(&msg).expect("Could not parse message from ws");
     debug!("{:?}", msg);
@@ -98,83 +96,83 @@ async fn process_text_message(
             let m = WelcomeMessage::from(msg.payload);
 
             for (id, name) in broadcasters_ids.iter() {
-                let event_data = EventData {
+                let mut event_data = EventData {
                     event: "stream.online",
                     broadcaster_id: id,
                     name,
                     session_id: &m.session.id,
                 };
-                register_event(event_data, http_client, headers).await;
+                register_event(&event_data, http_client, headers).await;
 
-                let event_data = EventData {
-                    event: "stream.offline",
-                    broadcaster_id: id,
-                    name,
-                    session_id: &m.session.id,
-                };
-                register_event(event_data, http_client, headers).await;
+                event_data.event = "stream.offline";
+                register_event(&event_data, http_client, headers).await;
 
-                let event_data = EventData {
-                    event: "channel.update",
-                    broadcaster_id: id,
-                    name,
-                    session_id: &m.session.id,
-                };
-                register_event(event_data, http_client, headers).await;
+                event_data.event = "channel.update";
+                register_event(&event_data, http_client, headers).await;
             }
 
             return MessageResponse::ConnectionSucessful;
         }
         MessageType::KeepAlive => {}
         MessageType::Notification => {
-            let m = NotificationMessage::from(msg.payload);
+            let m = NotificationMessage::from(msg);
 
-            if m.event.title.is_some() {
-                let msg = format!(
-                    "Stream {} is changing info, title is {} ",
-                    m.event.broadcaster_user_name,
-                    m.event.title.unwrap()
-                );
-                info!("{}", msg);
-                send_notification(ntfy, msg, Some(&m.event.broadcaster_user_name)).await;
-                return Continue;
+            match m.subscription.sub_type {
+                EventType::Online => {
+                    let (tx, rx) = oneshot::channel();
+                    info!(
+                        "Resetting autoso status for channel {}",
+                        m.event.broadcaster_user_name
+                    );
+                    let cmd = Command::ResetSoStatus {
+                        channel: m.event.broadcaster_user_name.clone(),
+                        resp: tx,
+                    };
+                    let _ = sender.send(cmd).await;
+                    assert_eq!(rx.await.unwrap(), ());
+
+                    send_notification(
+                        &config.ntfy,
+                        "Stream starting".to_string(),
+                        Some(&m.event.broadcaster_user_name),
+                    )
+                    .await;
+                    info!("Sending true to channel {}", m.event.broadcaster_user_name);
+                    let (tx, rx) = oneshot::channel();
+                    let cmd = Command::SetChannelStatus {
+                        key: m.event.broadcaster_user_name,
+                        val: true,
+                        resp: tx,
+                    };
+                    let _ = sender.send(cmd).await;
+                    assert_eq!(rx.await.unwrap(), ());
+                }
+                EventType::Offline => {
+                    info!("Sending false to channel {}", m.event.broadcaster_user_name);
+                    let (tx, rx) = oneshot::channel();
+                    let cmd = Command::SetChannelStatus {
+                        key: m.event.broadcaster_user_name,
+                        val: false,
+                        resp: tx,
+                    };
+                    let _ = sender.send(cmd).await;
+                    assert_eq!(rx.await.unwrap(), ());
+                }
+                EventType::StreamChange => {
+                    let msg = format!(
+                        "Stream {} is changing info, title is {} ",
+                        m.event.broadcaster_user_name,
+                        m.event.title.unwrap()
+                    );
+                    info!("{}", msg);
+                    send_notification(&config.ntfy, msg, Some(&m.event.broadcaster_user_name))
+                        .await;
+                }
+                EventType::PredictionStart => {}
+                EventType::PredictionProgress => {}
+                EventType::PredictionEnd => {}
+                EventType::Other => {}
             }
-
-            let starting_stream = m.event.online_type.is_some();
-
-            if starting_stream {
-                let (tx, rx) = oneshot::channel();
-                info!(
-                    "Resetting autoso status for channel {}",
-                    m.event.broadcaster_user_name
-                );
-                let cmd = Command::ResetSoStatus {
-                    channel: m.event.broadcaster_user_name.clone(),
-                    resp: tx,
-                };
-                let _ = sender.send(cmd).await;
-                assert_eq!(rx.await.unwrap(), ());
-
-                send_notification(
-                    ntfy,
-                    "Stream starting".to_string(),
-                    Some(&m.event.broadcaster_user_name),
-                )
-                .await;
-            }
-
-            info!(
-                "Sending {} to channel {}",
-                starting_stream, m.event.broadcaster_user_name,
-            );
-            let (tx, rx) = oneshot::channel();
-            let cmd = Command::SetChannelStatus {
-                key: m.event.broadcaster_user_name,
-                val: starting_stream,
-                resp: tx,
-            };
-            let _ = sender.send(cmd).await;
-            assert_eq!(rx.await.unwrap(), ());
         }
         MessageType::Reconnect => {
             let m = ReconnectMessage::from(msg.payload);
@@ -196,7 +194,7 @@ async fn process_message(
     headers: &HttpHeaders<'_>,
     sender: &Sender<Command>,
     reconnecting: bool,
-    ntfy: &Option<Ntfy>,
+    config: &BotConfig,
 ) -> MessageResponse {
     match m {
         Message::Text(msg) => {
@@ -207,7 +205,7 @@ async fn process_message(
                 headers,
                 sender,
                 reconnecting,
-                ntfy,
+                config,
             )
             .await;
         }
@@ -216,7 +214,8 @@ async fn process_message(
                 None => {}
                 Some(c) => {
                     error!("Closing reason {}", c);
-                    send_notification(ntfy, format!("Closing connection: {:?}", c), None).await;
+                    send_notification(&config.ntfy, format!("Closing connection: {:?}", c), None)
+                        .await;
                     if c.reason.contains("4007") {
                         warn!("WTF");
                     }
@@ -307,7 +306,7 @@ pub fn create_event_loop(conf: Arc<BotConfig>, sender: Sender<Command>) -> JoinH
                     &headers,
                     &sender,
                     last_client.is_some(),
-                    &conf.ntfy,
+                    &conf,
                 )
                 .await;
                 match rec {
