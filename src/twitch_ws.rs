@@ -110,7 +110,7 @@ pub struct Predictor {
     pub user_name: String,
     pub user_login: String,
     pub user_id: String,
-    pub channel_points_won: u32,
+    pub channel_points_won: Option<u32>,
     pub channel_points_used: u32,
 }
 

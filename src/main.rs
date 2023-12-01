@@ -92,7 +92,7 @@ pub async fn create_auth_file(config: &BotConfig) {
     ?response_type=code\
     &client_id={}\
     &redirect_uri=http://localhost:8000\
-    &scope=chat%3Aread+chat%3Aedit\
+    &scope=chat%3Aread+chat%3Aedit+channel%3Aread%3Apredictions\
     &state=c3ab8aa609ea11e793ae92361f002671
     ",
         config.client_id

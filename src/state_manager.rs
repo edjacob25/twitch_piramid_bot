@@ -1,10 +1,13 @@
 use crate::bot_config::BotConfig;
 use crate::bot_token_storage::CustomTokenStorage;
-use log::{debug, info};
+use chrono::{DateTime, Utc};
+use log::{debug, error, info};
 use reqwest::Client;
 use rocksdb::Direction::Forward;
 use rocksdb::{IteratorMode, DB};
 use serde::Deserialize;
+use std::collections::HashMap;
+use std::fs;
 use std::sync::Arc;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::oneshot;
@@ -39,6 +42,20 @@ pub enum Command {
         channel: String,
         resp: Responder<()>,
     },
+    StartPrediction {
+        channel: String,
+        question: String,
+        resp: Responder<()>,
+    },
+    PredictionProgress {
+        channel: String,
+        responses: Vec<(String, Vec<(String, u32)>)>,
+        resp: Responder<()>,
+    },
+    PredictionEnd {
+        channel: String,
+        resp: Responder<()>,
+    },
 }
 
 #[derive(Debug, Deserialize)]
@@ -52,7 +69,14 @@ struct ChannelData {
     user_login: String,
 }
 
+struct StreamPrediction {
+    name: String,
+    date: DateTime<Utc>,
+    predictions: HashMap<String, HashMap<String, u32>>,
+}
+
 fn process_command(cmd: Command) {
+    let mut predictions: HashMap<String, StreamPrediction> = HashMap::new();
     use Command::*;
     match cmd {
         GetChannelStatus { key, resp } => {
@@ -121,6 +145,50 @@ fn process_command(cmd: Command) {
                     break;
                 }
                 db.put(key, vec![0]).expect("Could not set row to false ");
+            }
+            resp.send(()).expect("Cannot callback");
+        }
+        StartPrediction {
+            channel,
+            question,
+            resp,
+        } => {
+            predictions.insert(
+                channel,
+                StreamPrediction {
+                    name: question,
+                    date: Utc::now(),
+                    predictions: HashMap::new(),
+                },
+            );
+            resp.send(()).expect("Cannot callback");
+        }
+        PredictionProgress {
+            channel,
+            responses,
+            resp,
+        } => {
+            let prediction = predictions.get_mut(&channel).expect("Should exist wtf");
+            for (answer, responders) in responses {
+                let answer = prediction
+                    .predictions
+                    .entry(answer)
+                    .or_insert(HashMap::new());
+                for (responder, points) in responders {
+                    *answer.entry(responder).or_insert(0) = points;
+                }
+            }
+            resp.send(()).expect("Cannot callback");
+        }
+        PredictionEnd { channel, resp } => {
+            let prediction = predictions.get(&channel).expect("Should exist wtf");
+            let filename = format!("data/{}_{}.json", prediction.name, prediction.date);
+            let content = serde_json::to_string(&prediction.predictions);
+            match content {
+                Ok(str) => fs::write(filename, str).expect("Could not write"),
+                Err(_) => {
+                    error!("Could not parse prediction")
+                }
             }
             resp.send(()).expect("Cannot callback");
         }

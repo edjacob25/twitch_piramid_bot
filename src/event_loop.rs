@@ -6,6 +6,7 @@ use crate::twitch_ws::*;
 use futures_util::{SinkExt, StreamExt};
 use log::{debug, error, info, warn};
 use reqwest::{Client, StatusCode};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
@@ -94,6 +95,8 @@ async fn process_text_message(
             }
 
             let m = WelcomeMessage::from(msg.payload);
+            let hash: HashMap<String, &ChannelConfig> =
+                HashMap::from_iter(config.channels.iter().map(|c| (c.channel_name.clone(), c)));
 
             for (id, name) in broadcasters_ids.iter() {
                 let mut event_data = EventData {
@@ -109,6 +112,21 @@ async fn process_text_message(
 
                 event_data.event = "channel.update";
                 register_event(&event_data, http_client, headers).await;
+
+                if hash.contains_key(name)
+                    && hash
+                        .get(name)
+                        .unwrap()
+                        .prediction_monitoring
+                        .unwrap_or(false)
+                {
+                    event_data.event = "channel.prediction.begin";
+                    register_event(&event_data, http_client, headers).await;
+                    event_data.event = "channel.prediction.progress";
+                    register_event(&event_data, http_client, headers).await;
+                    event_data.event = "channel.prediction.end";
+                    register_event(&event_data, http_client, headers).await;
+                }
             }
 
             return MessageResponse::ConnectionSucessful;
@@ -168,9 +186,57 @@ async fn process_text_message(
                     send_notification(&config.ntfy, msg, Some(&m.event.broadcaster_user_name))
                         .await;
                 }
-                EventType::PredictionStart => {}
-                EventType::PredictionProgress => {}
-                EventType::PredictionEnd => {}
+                EventType::PredictionStart => {
+                    let question = m
+                        .event
+                        .title
+                        .unwrap_or("Could not get question".to_string());
+                    info!("Starting prediction for {}", m.event.broadcaster_user_name);
+                    let (tx, rx) = oneshot::channel();
+                    let cmd = Command::StartPrediction {
+                        channel: m.event.broadcaster_user_name,
+                        question,
+                        resp: tx,
+                    };
+                    let _ = sender.send(cmd).await;
+                    assert_eq!(rx.await.unwrap(), ());
+                }
+                EventType::PredictionProgress => {
+                    let options = m.event.outcomes.expect("Poll options have to exist");
+
+                    let responses = options
+                        .iter()
+                        .map(|option| {
+                            (
+                                option.title.clone(),
+                                option
+                                    .top_predictors
+                                    .iter()
+                                    .map(|p| (p.user_name.clone(), p.channel_points_used))
+                                    .collect::<Vec<(String, u32)>>(),
+                            )
+                        })
+                        .collect::<Vec<(String, Vec<(String, u32)>)>>();
+                    info!("Prediction progress for {}", m.event.broadcaster_user_name);
+                    let (tx, rx) = oneshot::channel();
+                    let cmd = Command::PredictionProgress {
+                        channel: m.event.broadcaster_user_name,
+                        responses,
+                        resp: tx,
+                    };
+                    let _ = sender.send(cmd).await;
+                    assert_eq!(rx.await.unwrap(), ());
+                }
+                EventType::PredictionEnd => {
+                    info!("Ending prediction for {}", m.event.broadcaster_user_name);
+                    let (tx, rx) = oneshot::channel();
+                    let cmd = Command::PredictionEnd {
+                        channel: m.event.broadcaster_user_name,
+                        resp: tx,
+                    };
+                    let _ = sender.send(cmd).await;
+                    assert_eq!(rx.await.unwrap(), ());
+                }
                 EventType::Other => {}
             }
         }

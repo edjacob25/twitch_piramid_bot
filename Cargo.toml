@@ -10,6 +10,7 @@ default-run = "twitch_piramid_bot"
 axum = {version = "0.6.2", optional = true }
 askama = {version = "0.11", optional = true }
 async-trait = "0.1.68"
+chrono = {version = "0.4.31", features = ["serde"]}
 config = {version = "0.13.2", features = ["toml"]}
 governor = "0.5.1"
 futures-util = "0.3.15"
