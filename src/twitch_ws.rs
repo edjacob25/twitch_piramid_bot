@@ -76,7 +76,7 @@ pub struct Transport {
     pub session_id: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Event {
     pub id: Option<String>,
     pub broadcaster_user_id: String,
@@ -95,7 +95,7 @@ pub struct Event {
     pub outcomes: Option<Vec<PollOption>>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct PollOption {
     pub id: String,
     pub title: String,
@@ -105,7 +105,7 @@ pub struct PollOption {
     pub top_predictors: Vec<Predictor>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Predictor {
     pub user_name: String,
     pub user_login: String,

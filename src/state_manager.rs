@@ -1,5 +1,6 @@
 use crate::bot_config::BotConfig;
 use crate::bot_token_storage::CustomTokenStorage;
+use crate::twitch_ws::Event;
 use chrono::{DateTime, Utc};
 use log::{debug, error, info};
 use reqwest::Client;
@@ -56,6 +57,15 @@ pub enum Command {
         channel: String,
         resp: Responder<()>,
     },
+    GetStreamInfo {
+        channel: String,
+        resp: Responder<Event>,
+    },
+    SetStreamInfo {
+        channel: String,
+        event: Event,
+        resp: Responder<()>,
+    },
 }
 
 #[derive(Debug, Deserialize)]
@@ -75,7 +85,7 @@ struct StreamPrediction {
     predictions: HashMap<String, HashMap<String, u32>>,
 }
 
-fn process_command(cmd: Command) {
+fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
     let mut predictions: HashMap<String, StreamPrediction> = HashMap::new();
     use Command::*;
     match cmd {
@@ -192,6 +202,30 @@ fn process_command(cmd: Command) {
             }
             resp.send(()).expect("Cannot callback");
         }
+        GetStreamInfo { channel, resp } => {
+            let current = streams_data.entry(channel.clone()).or_insert(Event {
+                id: None,
+                broadcaster_user_id: channel.clone(),
+                broadcaster_user_name: channel.clone(),
+                online_type: None,
+                started_at: None,
+                title: None,
+                language: None,
+                category_id: None,
+                category_name: None,
+                broadcaster_user_login: channel,
+                outcomes: None,
+            });
+            let _ = resp.send(current.clone());
+        }
+        SetStreamInfo {
+            channel,
+            event,
+            resp,
+        } => {
+            streams_data.insert(channel, event);
+            resp.send(()).expect("Cannot callback");
+        }
     }
 }
 
@@ -243,8 +277,9 @@ pub fn create_manager(conf: Arc<BotConfig>, mut receiver: Receiver<Command>) -> 
         }
         drop(db);
         info!("Starting to receive messages");
+        let mut streams_data = HashMap::new();
         while let Some(cmd) = receiver.recv().await {
-            process_command(cmd);
+            process_command(cmd, &mut streams_data);
         }
     })
 }

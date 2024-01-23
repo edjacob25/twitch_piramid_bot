@@ -7,6 +7,7 @@ use futures_util::{SinkExt, StreamExt};
 use log::{debug, error, info, warn};
 use reqwest::{Client, StatusCode};
 use std::collections::HashMap;
+use std::ops::Add;
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
@@ -177,14 +178,43 @@ async fn process_text_message(
                     assert_eq!(rx.await.unwrap(), ());
                 }
                 EventType::StreamChange => {
-                    let msg = format!(
-                        "Stream {} is changing info, title is {} ",
-                        m.event.broadcaster_user_name,
-                        m.event.title.unwrap()
+                    let (tx, rx) = oneshot::channel();
+                    let cmd = Command::GetStreamInfo {
+                        channel: m.event.broadcaster_user_name.clone(),
+                        resp: tx,
+                    };
+                    sender.send(cmd).await.expect("Could not send request for channel status");
+                    let event = match rx.await {
+                        Ok(res) => res,
+                        Err(_) => panic!("wot m8"),
+                    };
+
+                    let mut msg = format!(
+                        "Stream {} is changing info: ",
+                        m.event.broadcaster_user_name.clone(),
                     );
+                    let new_title = m.event.title.clone().unwrap();
+                    if event.title.unwrap_or("".to_string()) != new_title {
+                        msg = msg.add(&format!("Title -> {}, ", new_title))
+                    }
+
+                    let new_cat = m.event.category_name.clone().unwrap();
+                    if event.category_name.unwrap_or("".to_string()) != new_cat {
+                        msg = msg.add(&format!("Category -> {}", new_cat))
+                    }
+
                     info!("{}", msg);
-                    send_notification(&config.ntfy, msg, Some(&m.event.broadcaster_user_name))
+                    send_notification(&config.ntfy, msg, Some(&m.event.broadcaster_user_name.clone()))
                         .await;
+
+                    let (tx, rx) = oneshot::channel();
+                    let cmd = Command::SetStreamInfo {
+                        channel: m.event.broadcaster_user_name.clone(),
+                        event: m.event,
+                        resp: tx,
+                    };
+                    let _ = sender.send(cmd).await;
+                    assert_eq!(rx.await.unwrap(), ());
                 }
                 EventType::PredictionStart => {
                     let question = m
