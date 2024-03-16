@@ -391,9 +391,10 @@ pub fn create_event_loop(conf: Arc<BotConfig>, sender: Sender<Command>) -> JoinH
                         .await;
                         error!("Could not receive message from ws: {:?}", e);
                         if e.to_string().contains("ConnectionReset") {
-                            Message::Close(None);
+                            Message::Close(None)
+                        } else {
+                            continue;
                         }
-                        continue;
                     }
                 };
 
