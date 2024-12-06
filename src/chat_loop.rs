@@ -75,10 +75,7 @@ async fn do_pyramid_counting(
         resp: tx,
     };
     let _ = sender.send(cmd).await;
-    let is_online = match rx.await {
-        Ok(res) => res,
-        Err(_) => false,
-    };
+    let is_online = rx.await.unwrap_or_else(|_| false);
 
     if !is_online {
         return;
@@ -199,10 +196,7 @@ async fn do_auto_so(
                 .send(cmd)
                 .await
                 .expect("Could not send request for so status");
-            let already_sod = match rx.await {
-                Ok(res) => res,
-                Err(_) => true,
-            };
+            let already_sod = rx.await.unwrap_or_else(|_| true);
             if !already_sod {
                 say_rate_limited(
                     &combo,
