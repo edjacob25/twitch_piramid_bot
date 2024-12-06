@@ -14,6 +14,7 @@ use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::tungstenite::error::Error as WsError;
 use twitch_irc::login::{LoginCredentials, RefreshingLoginCredentials, TokenStorage};
 
 async fn register_event(
@@ -96,7 +97,7 @@ async fn process_text_message(
             }
 
             let m = WelcomeMessage::from(msg.payload);
-            let hash: HashMap<String, &ChannelConfig> =
+            let channel_configs: HashMap<String, &ChannelConfig> =
                 HashMap::from_iter(config.channels.iter().map(|c| (c.channel_name.clone(), c)));
 
             for (id, name) in broadcasters_ids.iter() {
@@ -114,8 +115,8 @@ async fn process_text_message(
                 event_data.event = "channel.update";
                 register_event(&event_data, http_client, headers).await;
 
-                if hash.contains_key(name)
-                    && hash
+                if channel_configs.contains_key(name)
+                    && channel_configs
                         .get(name)
                         .unwrap()
                         .prediction_monitoring
@@ -390,9 +391,12 @@ pub fn create_event_loop(conf: Arc<BotConfig>, sender: Sender<Command>) -> JoinH
                         )
                         .await;
                         error!("Could not receive message from ws: {:?}", e);
-                        if e.to_string().contains("ConnectionReset") {
+                        error!("The to_str {}", e.to_string());
+                        if let WsError::Io(_) = e {
+                            error!("Connection reset route");
                             Message::Close(None)
                         } else {
+                            error!("Ignoring the error");
                             continue;
                         }
                     }
