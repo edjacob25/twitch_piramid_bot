@@ -402,6 +402,8 @@ pub fn create_event_loop(conf: Arc<BotConfig>, sender: Sender<Command>) -> JoinH
                     }
                 };
 
+                let reconnecting = last_client.is_some();
+
                 let rec = process_message(
                     m,
                     &broadcasters_ids,
@@ -409,7 +411,7 @@ pub fn create_event_loop(conf: Arc<BotConfig>, sender: Sender<Command>) -> JoinH
                     &mut ws_write,
                     &headers,
                     &sender,
-                    last_client.is_some(),
+                    reconnecting,
                     &conf,
                 )
                 .await;
@@ -439,13 +441,14 @@ pub fn create_event_loop(conf: Arc<BotConfig>, sender: Sender<Command>) -> JoinH
 
                         let c = credentials.get_credentials().await;
                         headers.token = c.unwrap().token.unwrap();
-                        if last_client.is_some() {
-                            let (mut old_w, old_r) = last_client.unwrap();
-                            let _ = old_w.close();
-                            last_client = None;
-                            drop(old_w);
-                            drop(old_r);
-                        }
+                        // if last_client.is_some() {
+                        //     let (mut old_w, old_r) = last_client.unwrap();
+                        //     let _ = old_w.close();
+                        //     last_client = None;
+                        //     drop(old_w);
+                        //     drop(old_r);
+                        //     error!("Closing it and dropping if necessary")
+                        // }
                         continue 'ws_creation;
                     }
                     _ => {}
