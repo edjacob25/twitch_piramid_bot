@@ -91,6 +91,149 @@ async fn send_notification(ntfy: &Option<Ntfy>, msg: String, login: Option<&str>
     }
 }
 
+async fn handle_notification(sender: &Sender<Command>, config: &BotConfig, m: NotificationMessage) {
+    match m.subscription.sub_type {
+        EventType::Online => {
+            let (tx, rx) = oneshot::channel();
+            info!(
+                "Resetting autoso status for channel {}",
+                m.event.broadcaster_user_name
+            );
+            let cmd = Command::ResetSoStatus {
+                channel: m.event.broadcaster_user_name.clone(),
+                resp: tx,
+            };
+            let _ = sender.send(cmd).await;
+            assert_eq!(rx.await.unwrap(), ());
+
+            send_notification(
+                &config.ntfy,
+                "Stream starting".to_string(),
+                Some(&m.event.broadcaster_user_name),
+            )
+                .await;
+            info!("Sending true to channel {}", m.event.broadcaster_user_name);
+            let (tx, rx) = oneshot::channel();
+            let cmd = Command::SetChannelStatus {
+                key: m.event.broadcaster_user_name,
+                val: true,
+                resp: tx,
+            };
+            let _ = sender.send(cmd).await;
+            assert_eq!(rx.await.unwrap(), ());
+        }
+        EventType::Offline => {
+            info!("Sending false to channel {}", m.event.broadcaster_user_name);
+            let (tx, rx) = oneshot::channel();
+            let cmd = Command::SetChannelStatus {
+                key: m.event.broadcaster_user_name,
+                val: false,
+                resp: tx,
+            };
+            let _ = sender.send(cmd).await;
+            assert_eq!(rx.await.unwrap(), ());
+        }
+        EventType::StreamChange => {
+            let (tx, rx) = oneshot::channel();
+            let cmd = Command::GetStreamInfo {
+                channel: m.event.broadcaster_user_name.clone(),
+                resp: tx,
+            };
+            sender
+                .send(cmd)
+                .await
+                .expect("Could not send request for channel status");
+            let event = match rx.await {
+                Ok(res) => res,
+                Err(_) => panic!("wot m8"),
+            };
+
+            let mut msg = format!(
+                "Stream {} is changing info: ",
+                m.event.broadcaster_user_name.clone()
+            );
+            let new_title = m.event.title.clone().unwrap();
+            if event.title.unwrap_or("".to_string()) != new_title {
+                msg = msg.add(&format!("Title -> {}, ", new_title))
+            }
+
+            let new_cat = m.event.category_name.clone().unwrap();
+            if event.category_name.unwrap_or("".to_string()) != new_cat {
+                msg = msg.add(&format!("Category -> {}", new_cat))
+            }
+
+            info!("{}", msg);
+            send_notification(
+                &config.ntfy,
+                msg,
+                Some(&m.event.broadcaster_user_name.clone()),
+            )
+                .await;
+
+            let (tx, rx) = oneshot::channel();
+            let cmd = Command::SetStreamInfo {
+                channel: m.event.broadcaster_user_name.clone(),
+                event: m.event,
+                resp: tx,
+            };
+            let _ = sender.send(cmd).await;
+            assert_eq!(rx.await.unwrap(), ());
+        }
+        EventType::PredictionStart => {
+            let question = m
+                .event
+                .title
+                .unwrap_or("Could not get question".to_string());
+            info!("Starting prediction for {}", m.event.broadcaster_user_name);
+            let (tx, rx) = oneshot::channel();
+            let cmd = Command::StartPrediction {
+                channel: m.event.broadcaster_user_name,
+                question,
+                resp: tx,
+            };
+            let _ = sender.send(cmd).await;
+            assert_eq!(rx.await.unwrap(), ());
+        }
+        EventType::PredictionProgress => {
+            let options = m.event.outcomes.expect("Poll options have to exist");
+
+            let responses = options
+                .iter()
+                .map(|option| {
+                    (
+                        option.title.clone(),
+                        option
+                            .top_predictors
+                            .iter()
+                            .map(|p| (p.user_name.clone(), p.channel_points_used))
+                            .collect::<Vec<(String, u32)>>(),
+                    )
+                })
+                .collect::<Vec<(String, Vec<(String, u32)>)>>();
+            info!("Prediction progress for {}", m.event.broadcaster_user_name);
+            let (tx, rx) = oneshot::channel();
+            let cmd = Command::PredictionProgress {
+                channel: m.event.broadcaster_user_name,
+                responses,
+                resp: tx,
+            };
+            let _ = sender.send(cmd).await;
+            assert_eq!(rx.await.unwrap(), ());
+        }
+        EventType::PredictionEnd => {
+            info!("Ending prediction for {}", m.event.broadcaster_user_name);
+            let (tx, rx) = oneshot::channel();
+            let cmd = Command::PredictionEnd {
+                channel: m.event.broadcaster_user_name,
+                resp: tx,
+            };
+            let _ = sender.send(cmd).await;
+            assert_eq!(rx.await.unwrap(), ());
+        }
+        EventType::Other => {}
+    }
+}
+
 async fn process_text_message(
     msg: &String,
     broadcasters_ids: &Vec<(String, String)>,
@@ -161,140 +304,7 @@ async fn process_text_message(
         MessageType::KeepAlive => {}
         MessageType::Notification => {
             let m = NotificationMessage::from(msg);
-
-            match m.subscription.sub_type {
-                EventType::Online => {
-                    let (tx, rx) = oneshot::channel();
-                    info!(
-                        "Resetting autoso status for channel {}",
-                        m.event.broadcaster_user_name
-                    );
-                    let cmd = Command::ResetSoStatus {
-                        channel: m.event.broadcaster_user_name.clone(),
-                        resp: tx,
-                    };
-                    let _ = sender.send(cmd).await;
-                    assert_eq!(rx.await.unwrap(), ());
-
-                    send_notification(
-                        &config.ntfy,
-                        "Stream starting".to_string(),
-                        Some(&m.event.broadcaster_user_name),
-                    )
-                    .await;
-                    info!("Sending true to channel {}", m.event.broadcaster_user_name);
-                    let (tx, rx) = oneshot::channel();
-                    let cmd = Command::SetChannelStatus {
-                        key: m.event.broadcaster_user_name,
-                        val: true,
-                        resp: tx,
-                    };
-                    let _ = sender.send(cmd).await;
-                    assert_eq!(rx.await.unwrap(), ());
-                }
-                EventType::Offline => {
-                    info!("Sending false to channel {}", m.event.broadcaster_user_name);
-                    let (tx, rx) = oneshot::channel();
-                    let cmd = Command::SetChannelStatus {
-                        key: m.event.broadcaster_user_name,
-                        val: false,
-                        resp: tx,
-                    };
-                    let _ = sender.send(cmd).await;
-                    assert_eq!(rx.await.unwrap(), ());
-                }
-                EventType::StreamChange => {
-                    let (tx, rx) = oneshot::channel();
-                    let cmd = Command::GetStreamInfo {
-                        channel: m.event.broadcaster_user_name.clone(),
-                        resp: tx,
-                    };
-                    sender.send(cmd).await.expect("Could not send request for channel status");
-                    let event = match rx.await {
-                        Ok(res) => res,
-                        Err(_) => panic!("wot m8"),
-                    };
-
-                    let mut msg = format!(
-                        "Stream {} is changing info: ",
-                        m.event.broadcaster_user_name.clone(),
-                    );
-                    let new_title = m.event.title.clone().unwrap();
-                    if event.title.unwrap_or("".to_string()) != new_title {
-                        msg = msg.add(&format!("Title -> {}, ", new_title))
-                    }
-
-                    let new_cat = m.event.category_name.clone().unwrap();
-                    if event.category_name.unwrap_or("".to_string()) != new_cat {
-                        msg = msg.add(&format!("Category -> {}", new_cat))
-                    }
-
-                    info!("{}", msg);
-                    send_notification(&config.ntfy, msg, Some(&m.event.broadcaster_user_name.clone()))
-                        .await;
-
-                    let (tx, rx) = oneshot::channel();
-                    let cmd = Command::SetStreamInfo {
-                        channel: m.event.broadcaster_user_name.clone(),
-                        event: m.event,
-                        resp: tx,
-                    };
-                    let _ = sender.send(cmd).await;
-                    assert_eq!(rx.await.unwrap(), ());
-                }
-                EventType::PredictionStart => {
-                    let question = m
-                        .event
-                        .title
-                        .unwrap_or("Could not get question".to_string());
-                    info!("Starting prediction for {}", m.event.broadcaster_user_name);
-                    let (tx, rx) = oneshot::channel();
-                    let cmd = Command::StartPrediction {
-                        channel: m.event.broadcaster_user_name,
-                        question,
-                        resp: tx,
-                    };
-                    let _ = sender.send(cmd).await;
-                    assert_eq!(rx.await.unwrap(), ());
-                }
-                EventType::PredictionProgress => {
-                    let options = m.event.outcomes.expect("Poll options have to exist");
-
-                    let responses = options
-                        .iter()
-                        .map(|option| {
-                            (
-                                option.title.clone(),
-                                option
-                                    .top_predictors
-                                    .iter()
-                                    .map(|p| (p.user_name.clone(), p.channel_points_used))
-                                    .collect::<Vec<(String, u32)>>(),
-                            )
-                        })
-                        .collect::<Vec<(String, Vec<(String, u32)>)>>();
-                    info!("Prediction progress for {}", m.event.broadcaster_user_name);
-                    let (tx, rx) = oneshot::channel();
-                    let cmd = Command::PredictionProgress {
-                        channel: m.event.broadcaster_user_name,
-                        responses,
-                        resp: tx,
-                    };
-                    let _ = sender.send(cmd).await;
-                    assert_eq!(rx.await.unwrap(), ());
-                }
-                EventType::PredictionEnd => {
-                    info!("Ending prediction for {}", m.event.broadcaster_user_name);
-                    let (tx, rx) = oneshot::channel();
-                    let cmd = Command::PredictionEnd {
-                        channel: m.event.broadcaster_user_name,
-                        resp: tx,
-                    };
-                    let _ = sender.send(cmd).await;
-                    assert_eq!(rx.await.unwrap(), ());
-                }
-                EventType::Other => {}
-            }
+            handle_notification(sender, config, m).await;
         }
         MessageType::Reconnect => {
             let m = ReconnectMessage::from(msg.payload);
