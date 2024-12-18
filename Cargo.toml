@@ -7,6 +7,7 @@ default-run = "twitch_piramid_bot"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1.0.94"
 askama = {version = "0.12.1", optional = true }
 async-trait = "0.1.79"
 axum = {version = "0.7.5", optional = true }

@@ -3,6 +3,7 @@ use crate::bot_token_storage::CustomTokenStorage;
 use crate::event_data::*;
 use crate::state_manager::Command;
 use crate::twitch_ws::*;
+use anyhow::{anyhow, bail, Result};
 use futures_util::{SinkExt, StreamExt};
 use log::{debug, error, info, warn};
 use reqwest::{Client, StatusCode};
@@ -13,15 +14,15 @@ use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use tokio_tungstenite::connect_async;
-use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::error::Error as WsError;
+use tokio_tungstenite::tungstenite::Message;
 use twitch_irc::login::{LoginCredentials, RefreshingLoginCredentials, TokenStorage};
 
 async fn register_event(
     event_data: &EventData<'_>,
     http_client: &Client,
     headers: &HttpHeaders<'_>,
-) {
+) -> Result<String> {
     let res = http_client
         .post("https://api.twitch.tv/helix/eventsub/subscriptions")
         .bearer_auth(headers.token.as_str())
@@ -38,14 +39,19 @@ async fn register_event(
             },
         })
         .send()
-        .await
-        .expect("Error sending event subscription request");
+        .await?;
 
     if res.status() == StatusCode::ACCEPTED {
         info!(
             "Accepted {} permission for {}",
             event_data.event, event_data.name
-        )
+        );
+        let num = res.json::<serde_json::Value>().await?["data"]["id"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Could not get subscription id"))?
+            .to_string();
+
+        Ok(num)
     } else {
         error!(
             "Error getting the {} sub for channel {}: Code: {} - {}",
@@ -53,7 +59,12 @@ async fn register_event(
             event_data.name,
             res.status(),
             res.text().await.unwrap_or("Unknown error".to_string())
-        )
+        );
+        bail!(
+            "Error getting the {} sub for channel {}",
+            event_data.event,
+            event_data.name
+        );
     }
 }
 
@@ -73,7 +84,9 @@ async fn send_notification(ntfy: &Option<Ntfy>, msg: String, login: Option<&str>
             if let Some(adr) = address {
                 req = req.header("Click", adr);
             }
-            let _res = req.send().await.expect("Could not reach ntfy server");
+            if let Err(e) = req.send().await {
+                error!("Error sending notification to ntfy: {}", e);
+            }
         });
     }
 }
@@ -93,13 +106,13 @@ async fn process_text_message(
         MessageType::Welcome => {
             if reconnecting {
                 warn!("Reconnection successful");
-                return MessageResponse::ConnectionSucessful;
+                return MessageResponse::ConnectionSuccessful(Vec::new());
             }
 
             let m = WelcomeMessage::from(msg.payload);
             let channel_configs: HashMap<String, &ChannelConfig> =
                 HashMap::from_iter(config.channels.iter().map(|c| (c.channel_name.clone(), c)));
-
+            let mut subscription_ids = Vec::new();
             for (id, name) in broadcasters_ids.iter() {
                 let mut event_data = EventData {
                     event: "stream.online",
@@ -107,13 +120,19 @@ async fn process_text_message(
                     name,
                     session_id: &m.session.id,
                 };
-                register_event(&event_data, http_client, headers).await;
+                if let Ok(num) = register_event(&event_data, http_client, headers).await {
+                    subscription_ids.push(num)
+                };
 
                 event_data.event = "stream.offline";
-                register_event(&event_data, http_client, headers).await;
+                if let Ok(num) = register_event(&event_data, http_client, headers).await {
+                    subscription_ids.push(num)
+                };
 
                 event_data.event = "channel.update";
-                register_event(&event_data, http_client, headers).await;
+                if let Ok(num) = register_event(&event_data, http_client, headers).await {
+                    subscription_ids.push(num)
+                };
 
                 if channel_configs.contains_key(name)
                     && channel_configs
@@ -123,15 +142,21 @@ async fn process_text_message(
                         .unwrap_or(false)
                 {
                     event_data.event = "channel.prediction.begin";
-                    register_event(&event_data, http_client, headers).await;
+                    if let Ok(num) = register_event(&event_data, http_client, headers).await {
+                        subscription_ids.push(num)
+                    };
                     event_data.event = "channel.prediction.progress";
-                    register_event(&event_data, http_client, headers).await;
+                    if let Ok(num) = register_event(&event_data, http_client, headers).await {
+                        subscription_ids.push(num)
+                    };
                     event_data.event = "channel.prediction.end";
-                    register_event(&event_data, http_client, headers).await;
+                    if let Ok(num) = register_event(&event_data, http_client, headers).await {
+                        subscription_ids.push(num)
+                    };
                 }
             }
 
-            return MessageResponse::ConnectionSucessful;
+            return MessageResponse::ConnectionSuccessful(subscription_ids);
         }
         MessageType::KeepAlive => {}
         MessageType::Notification => {
@@ -416,7 +441,7 @@ pub fn create_event_loop(conf: Arc<BotConfig>, sender: Sender<Command>) -> JoinH
                 )
                 .await;
                 match rec {
-                    MessageResponse::ConnectionSucessful if last_client.is_some() => {
+                    MessageResponse::ConnectionSuccessful(ids) if last_client.is_some() => {
                         warn!("Actually closing the old connection");
                         let (mut old_w, old_r) = last_client.unwrap();
                         let _ = old_w.close();

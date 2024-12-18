@@ -39,7 +39,7 @@ pub struct UserData {
 }
 
 pub enum MessageResponse {
-    ConnectionSucessful,
+    ConnectionSuccessful(Vec<String>),
     Continue,
     Reconnect(String),
     Close,
