@@ -42,6 +42,7 @@ pub enum MessageResponse {
     ConnectionSuccessful(Vec<String>),
     Continue,
     Reconnect(String),
+    Pong(Vec<u8>),
     Close,
 }
 
@@ -52,7 +53,7 @@ pub struct EventData<'a> {
     pub name: &'a str,
 }
 
-pub struct HttpHeaders<'a> {
+pub struct HttpHeaders {
     pub token: String,
-    pub client_id: &'a str,
+    pub client_id: String,
 }
