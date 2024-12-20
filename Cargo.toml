@@ -7,27 +7,27 @@ default-run = "twitch_piramid_bot"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.94"
-askama = {version = "0.12.1", optional = true }
-async-trait = "0.1.79"
-axum = {version = "0.7.5", optional = true }
-chrono = {version = "0.4.37", features = ["serde"]}
-config = {version = "0.14", features = ["toml"]}
-futures-util = "0.3.30"
-governor = "0.6.3"
-log = "0.4.20"
-rand = "0.8.5"
-regex = "1.10.4"
-reqwest = { version = "0.12.3", features = ["json"] }
-rocksdb = "0.22.0"
-serde = "1.0.197"
-serde_json = "1.0.115"
-serde_regex = "1.1.0"
-simple_logger = "4.3.3"
+anyhow = "1.0"
+askama = {version = "0.12", optional = true }
+async-trait = "0.1"
+axum = {version = "0.7", optional = true }
+chrono = {version = "0.4", features = ["serde"]}
+config = {version = "0.15", features = ["toml"]}
+futures-util = "0.3"
+governor = "0.8"
+log = "0.4"
+rand = "0.8"
+regex = "1.11"
+reqwest = { version = "0.12", features = ["json"] }
+rocksdb = "0.22"
+serde = "1.0"
+serde_json = "1.0"
+serde_regex = "1.1"
+simple_logger = "5.0"
 tokio = { version = "1", features = ["rt-multi-thread"] }
-tokio-tungstenite = { version = "0.21.0", features = ["native-tls"] }
-toml = "0.8.12"
-twitch-irc = { version = "5.0.1", features = ["transport-ws-native-tls", "refreshing-token-native-tls"] }
+tokio-tungstenite = { version = "0.26", features = ["native-tls"] }
+toml = "0.8"
+twitch-irc = { version = "5.0", features = ["transport-ws-native-tls", "refreshing-token-native-tls"] }
 
 [features]
 web = ["axum", "askama"]

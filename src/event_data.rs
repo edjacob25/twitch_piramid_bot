@@ -2,7 +2,7 @@ use crate::twitch_ws::{Condition, Transport};
 use futures_util::stream::{SplitSink, SplitStream};
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpStream;
-use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::tungstenite::{Bytes, Message};
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
 pub type WSWriter = SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>;
@@ -42,7 +42,7 @@ pub enum MessageResponse {
     ConnectionSuccessful(Vec<String>),
     Continue,
     Reconnect(String),
-    Pong(Vec<u8>),
+    Pong(Bytes),
     Close,
 }
 

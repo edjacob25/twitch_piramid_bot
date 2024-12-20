@@ -296,7 +296,7 @@ impl EventLoop {
         self.headers.token = c.unwrap().token.unwrap();
     }
 
-    async fn process_text_message(&self, msg: &String, reconnecting: bool) -> MessageResponse {
+    async fn process_text_message(&self, msg: &str, reconnecting: bool) -> MessageResponse {
         let msg: GeneralMessage =
             serde_json::from_str(&msg).expect("Could not parse message from ws");
         debug!("{:?}", msg);
@@ -380,7 +380,7 @@ impl EventLoop {
     async fn process_message(&self, m: Message, reconnecting: bool) -> MessageResponse {
         match m {
             Message::Text(msg) => {
-                return self.process_text_message(&msg, reconnecting).await;
+                return self.process_text_message(msg.as_str(), reconnecting).await;
             }
             Message::Close(close) => {
                 match close {
