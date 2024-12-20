@@ -62,7 +62,7 @@ pub async fn main() {
     let conf = Arc::new(conf);
     let _manager = create_manager(conf.clone(), rx);
     let _event_loop = create_event_loop(conf.clone(), tx.clone());
-    let join_handle = message_loop(&conf, incoming_messages, client.clone(), tx.clone());
+    let join_handle = message_loop(conf.clone(), incoming_messages, client.clone(), tx.clone());
 
     for channel_to_connect in &conf.channels {
         client

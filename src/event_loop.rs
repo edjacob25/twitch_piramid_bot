@@ -76,6 +76,7 @@ impl EventLoop {
             broadcasters_ids,
         }
     }
+
     async fn register_event(&self, event_data: &EventData<'_>) -> Result<String> {
         let res = self
             .http_client
@@ -121,6 +122,22 @@ impl EventLoop {
                 event_data.name
             );
         }
+    }
+
+    async fn unregister_events(&self, id: &str) -> Result<()> {
+        let params = [("id", id)];
+        let url = reqwest::Url::parse_with_params(
+            "https://api.twitch.tv/helix/eventsub/subscriptions",
+            params,
+        )?;
+        let _res = self
+            .http_client
+            .delete(url)
+            .bearer_auth(self.headers.token.as_str())
+            .header("Client-Id", &self.headers.client_id)
+            .send()
+            .await?;
+        Ok(())
     }
 
     async fn handle_event(&self, m: NotificationMessage) {
@@ -391,9 +408,11 @@ impl EventLoop {
         }
         MessageResponse::Continue
     }
+
     pub async fn run(&mut self) {
         let mut address = "wss://eventsub.wss.twitch.tv/ws".to_string();
         let mut last_client: Option<(WSWriter, WSReader)> = None;
+        let mut current_subscriptions = Vec::new();
         'ws_creation: loop {
             let (stream, _) = connect_async(&address)
                 .await
@@ -425,7 +444,7 @@ impl EventLoop {
 
                 let response = self.process_message(m, reconnecting).await;
                 match response {
-                    MessageResponse::ConnectionSuccessful(ids) if last_client.is_some() => {
+                    MessageResponse::ConnectionSuccessful(_ids) if reconnecting => {
                         warn!("Actually closing the old connection");
                         let (mut old_w, old_r) = last_client.unwrap();
                         let _ = old_w.close();
@@ -433,6 +452,7 @@ impl EventLoop {
                         drop(old_w);
                         drop(old_r);
                     }
+                    MessageResponse::ConnectionSuccessful(ids) => current_subscriptions = ids,
                     MessageResponse::Reconnect(reconnect_url) => {
                         address = reconnect_url;
                         break;
@@ -450,6 +470,15 @@ impl EventLoop {
                         //     drop(old_r);
                         //     error!("Closing it and dropping if necessary")
                         // }
+                        for current_subscription in current_subscriptions.iter() {
+                            if let Err(e) = self.unregister_events(current_subscription).await {
+                                error!(
+                                    "Could not unregister event {} with error {:?}",
+                                    current_subscription, e
+                                );
+                            }
+                        }
+                        current_subscriptions.clear();
                         continue 'ws_creation;
                     }
                     MessageResponse::Pong(data) => {
