@@ -20,6 +20,7 @@ use twitch_piramid_bot::state_manager::create_manager;
 pub async fn main() {
     SimpleLogger::new()
         .env()
+        .with_level(log::LevelFilter::Info)
         .init()
         .expect("Could not init logger");
     let settings = Config::builder()
