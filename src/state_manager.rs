@@ -1,11 +1,13 @@
 use crate::bot_config::BotConfig;
 use crate::bot_token_storage::CustomTokenStorage;
 use crate::twitch_ws::Event;
-use chrono::{DateTime, Utc};
+use anyhow::{Context, Result};
+use chrono::{DateTime, Local, Utc};
 use log::{debug, error, info};
 use reqwest::Client;
 use rocksdb::Direction::Forward;
 use rocksdb::{IteratorMode, DB};
+use rusqlite::Connection;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
@@ -64,6 +66,12 @@ pub enum Command {
     SetStreamInfo {
         channel: String,
         event: Event,
+        resp: Responder<()>,
+    },
+    CountBits {
+        channel: String,
+        user: String,
+        bits: u64,
         resp: Responder<()>,
     },
 }
@@ -218,15 +226,58 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
             });
             let _ = resp.send(current.clone());
         }
-        SetStreamInfo {
-            channel,
-            event,
-            resp,
-        } => {
+        SetStreamInfo { channel, event, resp } => {
             streams_data.insert(channel, event);
             resp.send(()).expect("Cannot callback");
         }
+        CountBits {
+            channel,
+            user,
+            bits,
+            resp,
+        } => {
+            let res = save_bits(channel.as_str(), user.as_str(), bits);
+            if let Err(e) = res {
+                error!("Could not save bits {:?}", e);
+            }
+            resp.send(()).expect("Cannot callback");
+        }
     }
+}
+
+fn save_bits(channel: &str, user: &str, bits: u64) -> Result<()> {
+    let conn = Connection::open("data/data.db").expect("Could not open db");
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS bits (
+                channel  TEXT NOT NULL,
+                date TEXT NOT NULL,
+                unix_time INTEGER NOT NULL,
+                user TEXT NOT NULL,
+                bits INTEGER NOT NULL
+            )",
+        (), // empty list of parameters.
+    )
+    .with_context(|| "Could not create table".to_string())?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS channel_date_idx ON bits(channel, unix_time)",
+        (),
+    )
+    .with_context(|| "Could not create index1".to_string())?;
+    conn.execute("CREATE INDEX IF NOT EXISTS channel_user_idx ON bits(channel, user)", ())
+        .with_context(|| "Could not create index2".to_string())?;
+    conn.execute("CREATE INDEX IF NOT EXISTS channel_user_idx ON bits(channel, user)", ())
+        .with_context(|| "Could not create index3".to_string())?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS channel_user_date_idx ON bits (channel, unix_time, user)",
+        (),
+    )?;
+    let now: DateTime<Local> = Local::now();
+    conn.execute(
+        "INSERT INTO bits VALUES (?, ?, ?, ?, ?)",
+        (channel, now.to_rfc3339(), now.timestamp(), user, bits),
+    )?;
+    let _ = conn.close();
+    Ok(())
 }
 
 pub fn create_manager(conf: Arc<BotConfig>, mut receiver: Receiver<Command>) -> JoinHandle<()> {

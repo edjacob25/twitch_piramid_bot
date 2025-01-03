@@ -1,6 +1,6 @@
 FROM docker.io/library/rust:latest as builder
 WORKDIR /usr/src/myapp
-RUN apt update && apt install -y librocksdb-dev clang
+RUN apt update && apt install -y librocksdb-dev clang libsqlite3-dev
 COPY . .
 RUN cargo build --release --bin twitch_piramid_bot
 FROM docker.io/library/debian:bookworm-slim

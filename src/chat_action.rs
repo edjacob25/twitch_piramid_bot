@@ -8,6 +8,7 @@ pub enum ChatAction {
     PyramidInterference,
     GiveSO,
     AutoSO,
+    CountBits,
 }
 
 impl FromStr for ChatAction {
@@ -20,6 +21,7 @@ impl FromStr for ChatAction {
             "PyramidInterference" => Ok(ChatAction::PyramidInterference),
             "GiveSO" => Ok(ChatAction::GiveSO),
             "AutoSO" => Ok(ChatAction::AutoSO),
+            "CountBits" => Ok(ChatAction::CountBits),
             _ => Err(()),
         }
     }

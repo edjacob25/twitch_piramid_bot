@@ -273,6 +273,20 @@ impl ChatLoop {
         }
     }
 
+    async fn count_bits(&self, msg: &ChatMessage) {
+        if let Some(bits) = msg.bits {
+            let (tx, rx) = oneshot::channel();
+            let cmd = Command::CountBits {
+                channel: msg.channel_login.clone(),
+                user: msg.sender.login.clone(),
+                bits,
+                resp: tx,
+            };
+            let _ = self.sender.send(cmd).await;
+            assert_eq!(rx.await.unwrap(), ())
+        }
+    }
+
     async fn process_twitch_message(&mut self, message: ServerMessage) {
         match message {
             ServerMessage::Privmsg(msg) => {
@@ -301,6 +315,9 @@ impl ChatLoop {
                         }
                         ChatAction::AutoSO => {
                             self.do_auto_so(&msg).await;
+                        }
+                        ChatAction::CountBits => {
+                            self.count_bits(&msg).await;
                         }
                         _ => {}
                     }
