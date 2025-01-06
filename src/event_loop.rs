@@ -122,17 +122,17 @@ impl EventLoop {
 
     async fn unregister_events(&self, id: &str) -> Result<()> {
         let params = [("id", id)];
-        let url = reqwest::Url::parse_with_params(
-            "https://api.twitch.tv/helix/eventsub/subscriptions",
-            params,
-        )?;
-        let _res = self
+        let url = reqwest::Url::parse_with_params("https://api.twitch.tv/helix/eventsub/subscriptions", params)?;
+        let res = self
             .http_client
             .delete(url)
             .bearer_auth(self.headers.token.as_str())
             .header("Client-Id", &self.headers.client_id)
             .send()
             .await?;
+        if res.status() != StatusCode::OK {
+            bail!("Status code is not 200: {}", res.status());
+        }
         Ok(())
     }
 
@@ -439,11 +439,12 @@ impl EventLoop {
                         //     error!("Closing it and dropping if necessary")
                         // }
                         for current_subscription in current_subscriptions.iter() {
+                            warn!("Unregistering subscription {}", current_subscription);
                             if let Err(e) = self.unregister_events(current_subscription).await {
-                                error!(
-                                    "Could not unregister event {} with error {:?}",
-                                    current_subscription, e
-                                );
+                                error!("Could not unregister event {} with error {:?}", current_subscription, e);
+                            }
+                            else {
+                                warn!("Successfully unregistered {}", current_subscription);
                             }
                         }
                         current_subscriptions.clear();
