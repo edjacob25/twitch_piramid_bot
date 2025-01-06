@@ -17,11 +17,8 @@ async fn main() {
     let app = Router::new().route("/", get(serve));
 
     // run it
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    axum::serve(listener, app).await.unwrap();
 }
 
 async fn serve() -> impl IntoResponse {
@@ -35,10 +32,7 @@ async fn serve() -> impl IntoResponse {
         let mut parts = key.split(" ");
         let channel = parts.next().unwrap();
         let person = parts.next().unwrap();
-        let value: u32 = String::from_utf8(value.into_vec())
-            .unwrap()
-            .parse()
-            .unwrap();
+        let value: u32 = String::from_utf8(value.into_vec()).unwrap().parse().unwrap();
 
         if last != channel {
             if last != "" {
