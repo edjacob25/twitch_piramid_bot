@@ -13,11 +13,7 @@ fn check_all_column_names() {
         .try_deserialize::<twitch_piramid_bot::bot_config::BotConfig>()
         .expect("Malformed config");
 
-    let names = conf
-        .channels
-        .iter()
-        .map(|x| &*x.channel_name)
-        .collect::<Vec<_>>();
+    let names = conf.channels.iter().map(|x| &*x.channel_name).collect::<Vec<_>>();
     let mut options = Options::default();
     options.create_missing_column_families(true);
     let db = DB::open_cf(&options, "pyramids_test", names).unwrap();

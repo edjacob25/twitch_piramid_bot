@@ -21,8 +21,7 @@ use twitch_irc::login::RefreshingLoginCredentials;
 use twitch_irc::message::{PrivmsgMessage as ChatMessage, ReplyToMessage, ServerMessage};
 use twitch_irc::transport::websocket::SecureWSTransport;
 
-type TwitchClient =
-    TwitchIRCClient<SecureWSTransport, RefreshingLoginCredentials<CustomTokenStorage>>;
+type TwitchClient = TwitchIRCClient<SecureWSTransport, RefreshingLoginCredentials<CustomTokenStorage>>;
 type Limiter = RateLimiter<String, DefaultKeyedStateStore<String>, DefaultClock>;
 
 struct PyramidData {
@@ -38,10 +37,8 @@ pub fn message_loop(
     sender: Sender<Command>,
 ) -> JoinHandle<()> {
     let join_handle = tokio::spawn(async move {
-        info!("Starting chat");
-        ChatLoop::new(conf, incoming_messages, cl, sender)
-            .run()
-            .await;
+        info!("Creating chat loop");
+        ChatLoop::new(conf, incoming_messages, cl, sender).run().await;
     });
     join_handle
 }
@@ -120,10 +117,7 @@ impl ChatLoop {
     }
 
     async fn respond_something(&self, msg: &ChatMessage) {
-        let config = self
-            .channel_configs
-            .get(msg.channel_login.as_str())
-            .unwrap();
+        let config = self.channel_configs.get(msg.channel_login.as_str()).unwrap();
 
         if let Some(c) = config.automatic_responses.as_ref() {
             for pair in c {
@@ -164,8 +158,7 @@ impl ChatLoop {
         num += 1;
         db.put(combined, format!("{}", num)).expect("Error with db");
         let message = format!("{} lleva {} piramides", name, num);
-        self.say_rate_limited(msg.channel_login.as_str(), message)
-            .await;
+        self.say_rate_limited(msg.channel_login.as_str(), message).await;
     }
 
     async fn do_pyramid_interference(&mut self, msg: &ChatMessage) {
@@ -187,11 +180,7 @@ impl ChatLoop {
             return;
         }
         let emote = emote.clone();
-        let num_of_matches = msg
-            .message_text
-            .match_indices(&emote)
-            .collect::<Vec<_>>()
-            .len();
+        let num_of_matches = msg.message_text.match_indices(&emote).collect::<Vec<_>>().len();
         let num_of_words = msg.message_text.split(" ").collect::<Vec<_>>().len();
         if num_of_words != num_of_matches {
             *pyramid_building = false;
@@ -203,10 +192,7 @@ impl ChatLoop {
                 *emote_count += 1;
 
                 if let Some(h) = config.harder_pyramids.as_ref() {
-                    if h.contains(&msg.sender.name)
-                        && *emote_count == 3
-                        && rand::random::<f32>() < 0.5
-                    {
+                    if h.contains(&msg.sender.name) && *emote_count == 3 && rand::random::<f32>() < 0.5 {
                         warn!("Taking it hard");
                         // self.say_rate_limited(&msg.channel_login, "No".to_string()).await;
                         *pyramid_building = false;
@@ -290,10 +276,7 @@ impl ChatLoop {
     async fn process_twitch_message(&mut self, message: ServerMessage) {
         match message {
             ServerMessage::Privmsg(msg) => {
-                info!(
-                    "(#{}) {}: {}",
-                    msg.channel_login, msg.sender.name, msg.message_text
-                );
+                info!("(#{}) {}: {}", msg.channel_login, msg.sender.name, msg.message_text);
 
                 let actions = self
                     .channel_configs

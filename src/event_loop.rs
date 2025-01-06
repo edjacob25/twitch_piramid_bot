@@ -60,8 +60,7 @@ impl EventLoop {
             .await
             .expect("Could not parse twitch user data");
 
-        let persons_data: UsersResponse =
-            serde_json::from_str(&res).expect("Could not parse persons");
+        let persons_data: UsersResponse = serde_json::from_str(&res).expect("Could not parse persons");
         let broadcasters_ids = persons_data
             .data
             .into_iter()
@@ -98,10 +97,7 @@ impl EventLoop {
             .await?;
 
         if res.status() == StatusCode::ACCEPTED {
-            info!(
-                "Accepted {} permission for {}",
-                event_data.event, event_data.name
-            );
+            info!("Accepted {} permission for {}", event_data.event, event_data.name);
             let num = res.json::<serde_json::Value>().await?["data"]["id"]
                 .as_str()
                 .ok_or_else(|| anyhow!("Could not get subscription id"))?
@@ -144,10 +140,7 @@ impl EventLoop {
         match m.subscription.sub_type {
             EventType::Online => {
                 let (tx, rx) = oneshot::channel();
-                info!(
-                    "Resetting autoso status for channel {}",
-                    m.event.broadcaster_user_name
-                );
+                info!("Resetting autoso status for channel {}", m.event.broadcaster_user_name);
                 let cmd = Command::ResetSoStatus {
                     channel: m.event.broadcaster_user_name.clone(),
                     resp: tx,
@@ -197,10 +190,7 @@ impl EventLoop {
                     Err(_) => panic!("wot m8"),
                 };
 
-                let mut msg = format!(
-                    "Stream {} is changing info: ",
-                    m.event.broadcaster_user_name.clone()
-                );
+                let mut msg = format!("Stream {} is changing info: ", m.event.broadcaster_user_name.clone());
                 let new_title = m.event.title.clone().unwrap();
                 if event.title.unwrap_or("".to_string()) != new_title {
                     msg = msg.add(&format!("Title -> {}, ", new_title))
@@ -212,12 +202,7 @@ impl EventLoop {
                 }
 
                 info!("{}", msg);
-                send_notification(
-                    &self.conf.ntfy,
-                    msg,
-                    Some(&m.event.broadcaster_user_name.clone()),
-                )
-                .await;
+                send_notification(&self.conf.ntfy, msg, Some(&m.event.broadcaster_user_name.clone())).await;
 
                 let (tx, rx) = oneshot::channel();
                 let cmd = Command::SetStreamInfo {
@@ -229,10 +214,7 @@ impl EventLoop {
                 assert_eq!(rx.await.unwrap(), ());
             }
             EventType::PredictionStart => {
-                let question = m
-                    .event
-                    .title
-                    .unwrap_or("Could not get question".to_string());
+                let question = m.event.title.unwrap_or("Could not get question".to_string());
                 info!("Starting prediction for {}", m.event.broadcaster_user_name);
                 let (tx, rx) = oneshot::channel();
                 let cmd = Command::StartPrediction {
@@ -297,8 +279,7 @@ impl EventLoop {
     }
 
     async fn process_text_message(&self, msg: &str, reconnecting: bool) -> MessageResponse {
-        let msg: GeneralMessage =
-            serde_json::from_str(&msg).expect("Could not parse message from ws");
+        let msg: GeneralMessage = serde_json::from_str(&msg).expect("Could not parse message from ws");
         debug!("{:?}", msg);
         match msg.metadata.message_type {
             MessageType::Welcome => {
@@ -308,12 +289,8 @@ impl EventLoop {
                 }
 
                 let m = WelcomeMessage::from(msg.payload);
-                let channel_configs: HashMap<String, &ChannelConfig> = HashMap::from_iter(
-                    self.conf
-                        .channels
-                        .iter()
-                        .map(|c| (c.channel_name.clone(), c)),
-                );
+                let channel_configs: HashMap<String, &ChannelConfig> =
+                    HashMap::from_iter(self.conf.channels.iter().map(|c| (c.channel_name.clone(), c)));
                 let mut subscription_ids = Vec::new();
                 for (id, name) in self.broadcasters_ids.iter() {
                     let mut event_data = EventData {
@@ -368,9 +345,7 @@ impl EventLoop {
             MessageType::Reconnect => {
                 let m = ReconnectMessage::from(msg.payload);
                 error!("Should reconnect");
-                return MessageResponse::Reconnect(
-                    m.session.reconnect_url.expect("There was no reconnect url"),
-                );
+                return MessageResponse::Reconnect(m.session.reconnect_url.expect("There was no reconnect url"));
             }
             MessageType::Revocation => {}
         }
@@ -387,12 +362,7 @@ impl EventLoop {
                     None => {}
                     Some(c) => {
                         error!("Closing reason {}", c);
-                        send_notification(
-                            &self.conf.ntfy,
-                            format!("Closing connection: {:?}", c),
-                            None,
-                        )
-                        .await;
+                        send_notification(&self.conf.ntfy, format!("Closing connection: {:?}", c), None).await;
                         if c.reason.contains("4007") {
                             warn!("WTF");
                         }
@@ -414,9 +384,7 @@ impl EventLoop {
         let mut last_client: Option<(WSWriter, WSReader)> = None;
         let mut current_subscriptions = Vec::new();
         'ws_creation: loop {
-            let (stream, _) = connect_async(&address)
-                .await
-                .expect("Could not connect to twitch");
+            let (stream, _) = connect_async(&address).await.expect("Could not connect to twitch");
             info!("Connected to {}", address);
             let (mut ws_write, mut ws_read) = stream.split();
             while let Some(message) = ws_read.next().await {
@@ -501,10 +469,7 @@ async fn send_notification(ntfy: &Option<Ntfy>, msg: String, login: Option<&str>
         };
         tokio::spawn(async move {
             let cl = Client::new();
-            let mut req = cl
-                .post(nt.address)
-                .basic_auth(nt.user, Some(nt.pass))
-                .body(msg);
+            let mut req = cl.post(nt.address).basic_auth(nt.user, Some(nt.pass)).body(msg);
             if let Some(adr) = address {
                 req = req.header("Click", adr);
             }

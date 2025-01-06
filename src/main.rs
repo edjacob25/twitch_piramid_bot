@@ -4,8 +4,7 @@ use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use twitch_irc::login::{
-    GetAccessTokenResponse, LoginCredentials, RefreshingLoginCredentials, TokenStorage,
-    UserAccessToken,
+    GetAccessTokenResponse, LoginCredentials, RefreshingLoginCredentials, TokenStorage, UserAccessToken,
 };
 use twitch_irc::ClientConfig;
 use twitch_irc::SecureWSTransport;
@@ -28,9 +27,7 @@ pub async fn main() {
         .build()
         .expect("Need the config");
 
-    let mut conf = settings
-        .try_deserialize::<BotConfig>()
-        .expect("Malformed config");
+    let mut conf = settings.try_deserialize::<BotConfig>().expect("Malformed config");
 
     let auth_file_location = Path::new(&conf.credentials_file);
     if auth_file_location.is_relative() {
@@ -44,19 +41,13 @@ pub async fn main() {
     let storage = CustomTokenStorage {
         location: conf.credentials_file.clone(),
     };
-    let credentials = RefreshingLoginCredentials::init(
-        conf.client_id.clone(),
-        conf.client_secret.clone(),
-        storage,
-    );
+    let credentials = RefreshingLoginCredentials::init(conf.client_id.clone(), conf.client_secret.clone(), storage);
 
     _ = credentials.get_credentials().await;
 
     let twitch_config = ClientConfig::new_simple(credentials);
-    let (incoming_messages, client) = TwitchIRCClient::<
-        SecureWSTransport,
-        RefreshingLoginCredentials<CustomTokenStorage>,
-    >::new(twitch_config);
+    let (incoming_messages, client) =
+        TwitchIRCClient::<SecureWSTransport, RefreshingLoginCredentials<CustomTokenStorage>>::new(twitch_config);
     //client.send_message(IRCMessage::parse("CAP REQ :twitch.tv/commands twitch.tv/tags").unwrap());
 
     let (tx, rx) = mpsc::channel(32);
@@ -104,9 +95,7 @@ pub async fn create_auth_file(config: &BotConfig) {
         link
     );
     let mut code = String::new();
-    let _b = std::io::stdin()
-        .read_line(&mut code)
-        .expect("Error reading the line");
+    let _b = std::io::stdin().read_line(&mut code).expect("Error reading the line");
     let code = code.trim();
     let client = reqwest::Client::new();
     let params = [

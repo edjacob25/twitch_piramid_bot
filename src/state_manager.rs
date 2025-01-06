@@ -135,10 +135,7 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
                 }
                 Err(_) => false,
             };
-            debug!(
-                "In channel {}, so_channel {} has status: {}",
-                channel, so_channel, res
-            );
+            debug!("In channel {}, so_channel {} has status: {}", channel, so_channel, res);
             let _ = resp.send(res);
         }
         SetSoStatus {
@@ -188,10 +185,7 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
         } => {
             let prediction = predictions.get_mut(&channel).expect("Should exist wtf");
             for (answer, responders) in responses {
-                let answer = prediction
-                    .predictions
-                    .entry(answer)
-                    .or_insert(HashMap::new());
+                let answer = prediction.predictions.entry(answer).or_insert(HashMap::new());
                 for (responder, points) in responders {
                     *answer.entry(responder).or_insert(0) = points;
                 }
@@ -320,11 +314,9 @@ pub fn create_manager(conf: Arc<BotConfig>, mut receiver: Receiver<Command>) -> 
             .await
             .expect("Could not parse response");
 
-        let online_channels: ChannelsResponse =
-            serde_json::from_str(&res).expect("Could not parse channel data");
+        let online_channels: ChannelsResponse = serde_json::from_str(&res).expect("Could not parse channel data");
         for c in online_channels.data {
-            db.put(c.user_login, vec![1])
-                .expect("Could not put online channels");
+            db.put(c.user_login, vec![1]).expect("Could not put online channels");
         }
         drop(db);
         info!("Starting to receive messages");
