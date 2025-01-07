@@ -274,7 +274,7 @@ fn save_bits(channel: &str, user: &str, bits: u64) -> Result<()> {
     Ok(())
 }
 
-pub fn create_manager(conf: Arc<BotConfig>, mut receiver: Receiver<Command>) -> JoinHandle<()> {
+pub fn create_state_manager(conf: Arc<BotConfig>, mut receiver: Receiver<Command>) -> JoinHandle<()> {
     tokio::spawn(async move {
         let user_query = conf
             .channels

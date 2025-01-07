@@ -13,7 +13,7 @@ use twitch_piramid_bot::bot_config::BotConfig;
 use twitch_piramid_bot::bot_token_storage::CustomTokenStorage;
 use twitch_piramid_bot::chat_loop::message_loop;
 use twitch_piramid_bot::event_loop::create_event_loop;
-use twitch_piramid_bot::state_manager::create_manager;
+use twitch_piramid_bot::state_manager::create_state_manager;
 
 #[tokio::main]
 pub async fn main() {
@@ -52,19 +52,19 @@ pub async fn main() {
 
     let (tx, rx) = mpsc::channel(32);
     let conf = Arc::new(conf);
-    let _manager = create_manager(conf.clone(), rx);
+    let _state_manager = create_state_manager(conf.clone(), rx);
     let _event_loop = create_event_loop(conf.clone(), tx.clone());
-    let join_handle = message_loop(conf.clone(), incoming_messages, client.clone(), tx.clone());
 
     for channel_to_connect in &conf.channels {
         client
             .join(channel_to_connect.channel_name.clone())
             .expect("Could not connect to a channel");
     }
+    let message_loop = message_loop(conf, incoming_messages, client.clone(), tx.clone());
 
     // keep the tokio executor alive.
     // If you return instead of waiting the background task will exit.
-    join_handle.await.unwrap();
+    message_loop.await.unwrap();
 }
 
 pub async fn create_auth_file(config: &BotConfig) {
