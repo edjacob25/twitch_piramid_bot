@@ -59,6 +59,11 @@ impl ChatLoop {
         cl: TwitchClient,
         sender: Sender<Command>,
     ) -> ChatLoop {
+        for channel_to_connect in &conf.channels {
+            cl.join(channel_to_connect.channel_name.clone())
+                .expect("Could not connect to a channel");
+        }
+
         let mut pyramids = PyramidData {
             building_flags: HashMap::new(),
             emote_counts: HashMap::new(),

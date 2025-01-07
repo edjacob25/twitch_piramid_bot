@@ -54,12 +54,6 @@ pub async fn main() {
     let conf = Arc::new(conf);
     let _state_manager = create_state_manager(conf.clone(), rx);
     let _event_loop = create_event_loop(conf.clone(), tx.clone());
-
-    for channel_to_connect in &conf.channels {
-        client
-            .join(channel_to_connect.channel_name.clone())
-            .expect("Could not connect to a channel");
-    }
     let message_loop = message_loop(conf, incoming_messages, client.clone(), tx.clone());
 
     // keep the tokio executor alive.
