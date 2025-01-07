@@ -98,11 +98,10 @@ impl EventLoop {
 
         if res.status() == StatusCode::ACCEPTED {
             info!("Accepted {} permission for {}", event_data.event, event_data.name);
-            let num = res.json::<serde_json::Value>().await?["data"]["id"]
+            let num = res.json::<serde_json::Value>().await?["data"][0]["id"]
                 .as_str()
                 .ok_or_else(|| anyhow!("Could not get subscription id"))?
                 .to_string();
-
             Ok(num)
         } else {
             error!(
@@ -119,7 +118,6 @@ impl EventLoop {
             );
         }
     }
-
     async fn unregister_events(&self, id: &str) -> Result<()> {
         let params = [("id", id)];
         let url = reqwest::Url::parse_with_params("https://api.twitch.tv/helix/eventsub/subscriptions", params)?;
@@ -335,6 +333,7 @@ impl EventLoop {
                     }
                 }
 
+                debug!("Subsciption ids {:?}", subscription_ids);
                 return MessageResponse::ConnectionSuccessful(subscription_ids);
             }
             MessageType::KeepAlive => {}
