@@ -29,6 +29,10 @@ pub async fn main() {
 
     let mut conf = settings.try_deserialize::<BotConfig>().expect("Malformed config");
 
+    let storage = CustomTokenStorage {
+        location: conf.credentials_file.clone(),
+    };
+
     let auth_file_location = Path::new(&conf.credentials_file);
     if auth_file_location.is_relative() {
         conf = BotConfig {
@@ -38,14 +42,11 @@ pub async fn main() {
     }
 
     create_auth_file(&conf).await;
-    let storage = CustomTokenStorage {
-        location: conf.credentials_file.clone(),
-    };
     let credentials = RefreshingLoginCredentials::init(conf.client_id.clone(), conf.client_secret.clone(), storage);
 
     _ = credentials.get_credentials().await;
 
-    let twitch_config = ClientConfig::new_simple(credentials);
+    let twitch_config = ClientConfig::new_simple(credentials.clone());
     let (incoming_messages, client) =
         TwitchIRCClient::<SecureWSTransport, RefreshingLoginCredentials<CustomTokenStorage>>::new(twitch_config);
     //client.send_message(IRCMessage::parse("CAP REQ :twitch.tv/commands twitch.tv/tags").unwrap());
@@ -53,7 +54,7 @@ pub async fn main() {
     let (tx, rx) = mpsc::channel(32);
     let conf = Arc::new(conf);
     let _state_manager = create_state_manager(conf.clone(), rx);
-    let _event_loop = create_event_loop(conf.clone(), tx.clone());
+    let _event_loop = create_event_loop(conf.clone(), tx.clone(), credentials);
     let message_loop = message_loop(conf, incoming_messages, client.clone(), tx.clone());
 
     // keep the tokio executor alive.

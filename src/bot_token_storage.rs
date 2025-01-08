@@ -80,7 +80,7 @@ impl From<toml::ser::Error> for UpdateError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct CustomTokenStorage {
     pub location: String,
 }

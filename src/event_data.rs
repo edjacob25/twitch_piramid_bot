@@ -52,8 +52,3 @@ pub struct EventData<'a> {
     pub session_id: &'a str,
     pub name: &'a str,
 }
-
-pub struct HttpHeaders {
-    pub token: String,
-    pub client_id: String,
-}

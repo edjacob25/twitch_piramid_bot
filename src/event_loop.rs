@@ -16,33 +16,28 @@ use tokio::task::JoinHandle;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::error::Error as WsError;
 use tokio_tungstenite::tungstenite::Message;
-use twitch_irc::login::{LoginCredentials, RefreshingLoginCredentials, TokenStorage};
+use twitch_irc::login::{LoginCredentials, RefreshingLoginCredentials};
+
+type Credentials = RefreshingLoginCredentials<CustomTokenStorage>;
 
 struct EventLoop {
     conf: Arc<BotConfig>,
     sender: Sender<Command>,
     http_client: Client,
-    headers: HttpHeaders,
+    credentials: Credentials,
     broadcasters_ids: Vec<(String, String)>,
 }
 
 impl EventLoop {
-    pub async fn new(conf: Arc<BotConfig>, sender: Sender<Command>) -> Self {
+    pub async fn new(conf: Arc<BotConfig>, sender: Sender<Command>, credentials: Credentials) -> Self {
         let http_client = Client::new();
-        let mut storage = CustomTokenStorage {
-            location: conf.credentials_file.clone(),
-        };
-        let token = storage
-            .load_token()
+        let token = credentials
+            .get_credentials()
             .await
-            .expect("Error Reading the credential file")
-            .access_token;
-        let headers = HttpHeaders {
-            token,
-            client_id: conf.client_id.clone(),
-        };
-
-        let user_query = conf
+            .expect("Could not read token")
+            .token
+            .expect("Token is empty");
+       let user_query = conf
             .channels
             .iter()
             .map(|c| ("login", c.channel_name.as_str()))
@@ -50,8 +45,8 @@ impl EventLoop {
 
         let res = http_client
             .get("https://api.twitch.tv/helix/users")
-            .bearer_auth(headers.token.as_str())
-            .header("Client-Id", headers.client_id.as_str())
+            .bearer_auth(token.as_str())
+            .header("Client-Id", conf.client_id.as_str())
             .query(&user_query)
             .send()
             .await
@@ -71,17 +66,27 @@ impl EventLoop {
             conf,
             sender,
             http_client,
-            headers,
+            credentials,
             broadcasters_ids,
         }
     }
 
+    async fn get_api_token(&self) -> Result<String> {
+        let token = self
+            .credentials
+            .get_credentials()
+            .await?
+            .token
+            .ok_or_else(|| anyhow!("No token detected"))?;
+        Ok(token)
+    }
     async fn register_event(&self, event_data: &EventData<'_>) -> Result<String> {
+        let token = self.get_api_token().await?;
         let res = self
             .http_client
             .post("https://api.twitch.tv/helix/eventsub/subscriptions")
-            .bearer_auth(self.headers.token.as_str())
-            .header("Client-Id", &self.headers.client_id)
+            .bearer_auth(token.as_str())
+            .header("Client-Id", &self.conf.client_id)
             .json(&EventRequestBody {
                 sub_type: event_data.event.to_string(),
                 version: "1".to_string(),
@@ -118,14 +123,16 @@ impl EventLoop {
             );
         }
     }
+
     async fn unregister_events(&self, id: &str) -> Result<()> {
+        let token = self.get_api_token().await?;
         let params = [("id", id)];
         let url = reqwest::Url::parse_with_params("https://api.twitch.tv/helix/eventsub/subscriptions", params)?;
         let res = self
             .http_client
             .delete(url)
-            .bearer_auth(self.headers.token.as_str())
-            .header("Client-Id", &self.headers.client_id)
+            .bearer_auth(token.as_str())
+            .header("Client-Id", &self.conf.client_id)
             .send()
             .await?;
         if res.status() != StatusCode::OK {
@@ -261,19 +268,6 @@ impl EventLoop {
             }
             EventType::Other => {}
         }
-    }
-
-    async fn refresh_credentials(&mut self) {
-        let credentials = RefreshingLoginCredentials::init(
-            self.conf.client_id.clone(),
-            self.conf.client_secret.clone(),
-            CustomTokenStorage {
-                location: self.conf.credentials_file.clone().clone(),
-            },
-        );
-
-        let c = credentials.get_credentials().await;
-        self.headers.token = c.unwrap().token.unwrap();
     }
 
     async fn process_text_message(&self, msg: &str, reconnecting: bool) -> MessageResponse {
@@ -427,7 +421,6 @@ impl EventLoop {
                     MessageResponse::Close => {
                         warn!("Resetting connection to base level");
                         address = "wss://eventsub.wss.twitch.tv/ws".to_string();
-                        self.refresh_credentials().await;
                         let _ = ws_write.close();
                         // if last_client.is_some() {
                         //     let (mut old_w, old_r) = last_client.unwrap();
@@ -441,8 +434,7 @@ impl EventLoop {
                             warn!("Unregistering subscription {}", current_subscription);
                             if let Err(e) = self.unregister_events(current_subscription).await {
                                 error!("Could not unregister event {} with error {:?}", current_subscription, e);
-                            }
-                            else {
+                            } else {
                                 warn!("Successfully unregistered {}", current_subscription);
                             }
                         }
@@ -480,8 +472,8 @@ async fn send_notification(ntfy: &Option<Ntfy>, msg: String, login: Option<&str>
     }
 }
 
-pub fn create_event_loop(conf: Arc<BotConfig>, sender: Sender<Command>) -> JoinHandle<()> {
+pub fn create_event_loop(conf: Arc<BotConfig>, sender: Sender<Command>, creds: Credentials) -> JoinHandle<()> {
     tokio::spawn(async move {
-        EventLoop::new(conf, sender).await.run().await;
+        EventLoop::new(conf, sender, creds).await.run().await;
     })
 }
