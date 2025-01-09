@@ -29,10 +29,6 @@ pub async fn main() {
 
     let mut conf = settings.try_deserialize::<BotConfig>().expect("Malformed config");
 
-    let storage = CustomTokenStorage {
-        location: conf.credentials_file.clone(),
-    };
-
     let auth_file_location = Path::new(&conf.credentials_file);
     if auth_file_location.is_relative() {
         conf = BotConfig {
@@ -42,6 +38,9 @@ pub async fn main() {
     }
 
     create_auth_file(&conf).await;
+    let storage = CustomTokenStorage {
+        location: conf.credentials_file.clone(),
+    };
     let credentials = RefreshingLoginCredentials::init(conf.client_id.clone(), conf.client_secret.clone(), storage);
 
     _ = credentials.get_credentials().await;
