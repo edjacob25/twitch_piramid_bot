@@ -36,11 +36,10 @@ pub fn message_loop(
     cl: TwitchClient,
     sender: Sender<Command>,
 ) -> JoinHandle<()> {
-    let join_handle = tokio::spawn(async move {
+    tokio::spawn(async move {
         info!("Creating chat loop");
         ChatLoop::new(conf, incoming_messages, cl, sender).run().await;
-    });
-    join_handle
+    })
 }
 
 struct ChatLoop {
@@ -145,7 +144,7 @@ impl ChatLoop {
             resp: tx,
         };
         let _ = self.sender.send(cmd).await;
-        let is_online = rx.await.unwrap_or_else(|_| false);
+        let is_online = rx.await.unwrap_or(false);
 
         if !is_online {
             return;
@@ -242,7 +241,7 @@ impl ChatLoop {
                     .send(cmd)
                     .await
                     .expect("Could not send request for so status");
-                let already_sod = rx.await.unwrap_or_else(|_| true);
+                let already_sod = rx.await.unwrap_or(true);
                 if !already_sod {
                     self.say_rate_limited(&msg.channel_login, format!("!so {}", msg.sender.name))
                         .await;

@@ -185,7 +185,7 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
         } => {
             let prediction = predictions.get_mut(&channel).expect("Should exist wtf");
             for (answer, responders) in responses {
-                let answer = prediction.predictions.entry(answer).or_insert(HashMap::new());
+                let answer = prediction.predictions.entry(answer).or_default();
                 for (responder, points) in responders {
                     *answer.entry(responder).or_insert(0) = points;
                 }

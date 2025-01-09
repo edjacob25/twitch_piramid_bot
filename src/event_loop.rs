@@ -37,7 +37,7 @@ impl EventLoop {
             .expect("Could not read token")
             .token
             .expect("Token is empty");
-       let user_query = conf
+        let user_query = conf
             .channels
             .iter()
             .map(|c| ("login", c.channel_name.as_str()))
@@ -271,7 +271,7 @@ impl EventLoop {
     }
 
     async fn process_text_message(&self, msg: &str, reconnecting: bool) -> MessageResponse {
-        let msg: GeneralMessage = serde_json::from_str(&msg).expect("Could not parse message from ws");
+        let msg: GeneralMessage = serde_json::from_str(msg).expect("Could not parse message from ws");
         debug!("{:?}", msg);
         match msg.metadata.message_type {
             MessageType::Welcome => {
@@ -454,11 +454,7 @@ impl EventLoop {
 }
 async fn send_notification(ntfy: &Option<Ntfy>, msg: String, login: Option<&str>) {
     if let Some(nt) = ntfy.clone() {
-        let address = if let Some(log) = login {
-            Some(format!("https://www.twitch.tv/{}", log))
-        } else {
-            None
-        };
+        let address = login.map(|log| format!("https://www.twitch.tv/{}", log));
         tokio::spawn(async move {
             let cl = Client::new();
             let mut req = cl.post(nt.address).basic_auth(nt.user, Some(nt.pass)).body(msg);
