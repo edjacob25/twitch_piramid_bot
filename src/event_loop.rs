@@ -135,7 +135,7 @@ impl EventLoop {
             .header("Client-Id", &self.conf.client_id)
             .send()
             .await?;
-        if res.status() != StatusCode::OK {
+        if res.status() != StatusCode::NO_CONTENT {
             bail!("Status code is not 200: {}", res.status());
         }
         Ok(())
