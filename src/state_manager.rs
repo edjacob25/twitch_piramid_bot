@@ -28,7 +28,6 @@ pub enum Command {
     SetChannelStatus {
         key: String,
         val: bool,
-        resp: Responder<()>,
     },
     GetSoStatus {
         channel: String,
@@ -39,25 +38,20 @@ pub enum Command {
         channel: String,
         so_channel: String,
         val: bool,
-        resp: Responder<()>,
     },
     ResetSoStatus {
         channel: String,
-        resp: Responder<()>,
     },
     StartPrediction {
         channel: String,
         question: String,
-        resp: Responder<()>,
     },
     PredictionProgress {
         channel: String,
         responses: Vec<(String, Vec<(String, u32)>)>,
-        resp: Responder<()>,
     },
     PredictionEnd {
         channel: String,
-        resp: Responder<()>,
     },
     GetStreamInfo {
         channel: String,
@@ -66,13 +60,11 @@ pub enum Command {
     SetStreamInfo {
         channel: String,
         event: Event,
-        resp: Responder<()>,
     },
     CountBits {
         channel: String,
         user: String,
         bits: u64,
-        resp: Responder<()>,
     },
 }
 
@@ -110,12 +102,11 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
             debug!("Channel {} online status: {}", key, res);
             let _ = resp.send(res);
         }
-        SetChannelStatus { key, val, resp } => {
+        SetChannelStatus { key, val } => {
             let db = DB::open_default("data/online.db").expect("Could not open online.db");
             debug!("Setting channel {} online status: {}", key, val);
             let savable = if val { vec![1] } else { vec![0] };
             db.put(key, savable).expect("Cannot set online status");
-            resp.send(()).expect("Cannot callback");
         }
         GetSoStatus {
             channel,
@@ -142,15 +133,13 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
             channel,
             so_channel,
             val,
-            resp,
         } => {
             let db = DB::open_default("data/autoso.db").expect("Could not open autoso.db");
             let key = format!("{} {}", channel, so_channel);
             let savable = if val { vec![1] } else { vec![0] };
             db.put(key, savable).expect("Cannot set online status");
-            resp.send(()).expect("Cannot callback");
         }
-        ResetSoStatus { channel, resp } => {
+        ResetSoStatus { channel } => {
             let db = DB::open_default("data/autoso.db").expect("Could not open autoso.db");
             let it = db.iterator(IteratorMode::From(channel.as_ref(), Forward));
             for v in it {
@@ -161,13 +150,8 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
                 }
                 db.put(key, vec![0]).expect("Could not set row to false ");
             }
-            resp.send(()).expect("Cannot callback");
         }
-        StartPrediction {
-            channel,
-            question,
-            resp,
-        } => {
+        StartPrediction { channel, question } => {
             predictions.insert(
                 channel,
                 StreamPrediction {
@@ -176,13 +160,8 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
                     predictions: HashMap::new(),
                 },
             );
-            resp.send(()).expect("Cannot callback");
         }
-        PredictionProgress {
-            channel,
-            responses,
-            resp,
-        } => {
+        PredictionProgress { channel, responses } => {
             let prediction = predictions.get_mut(&channel).expect("Should exist wtf");
             for (answer, responders) in responses {
                 let answer = prediction.predictions.entry(answer).or_default();
@@ -190,9 +169,8 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
                     *answer.entry(responder).or_insert(0) = points;
                 }
             }
-            resp.send(()).expect("Cannot callback");
         }
-        PredictionEnd { channel, resp } => {
+        PredictionEnd { channel } => {
             let prediction = predictions.get(&channel).expect("Should exist wtf");
             let filename = format!("data/{}_{}.json", prediction.name, prediction.date);
             let content = serde_json::to_string(&prediction.predictions);
@@ -202,7 +180,6 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
                     error!("Could not parse prediction")
                 }
             }
-            resp.send(()).expect("Cannot callback");
         }
         GetStreamInfo { channel, resp } => {
             let current = streams_data.entry(channel.clone()).or_insert(Event {
@@ -220,21 +197,14 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
             });
             let _ = resp.send(current.clone());
         }
-        SetStreamInfo { channel, event, resp } => {
+        SetStreamInfo { channel, event } => {
             streams_data.insert(channel, event);
-            resp.send(()).expect("Cannot callback");
         }
-        CountBits {
-            channel,
-            user,
-            bits,
-            resp,
-        } => {
+        CountBits { channel, user, bits } => {
             let res = save_bits(channel.as_str(), user.as_str(), bits);
             if let Err(e) = res {
                 error!("Could not save bits {:?}", e);
             }
-            resp.send(()).expect("Cannot callback");
         }
     }
 }

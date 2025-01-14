@@ -245,18 +245,15 @@ impl ChatLoop {
                 if !already_sod {
                     self.say_rate_limited(&msg.channel_login, format!("!so {}", msg.sender.name))
                         .await;
-                    let (tx, rx) = oneshot::channel();
                     let cmd = Command::SetSoStatus {
                         channel: msg.channel_login.clone(),
                         so_channel: msg.sender.name.clone(),
                         val: true,
-                        resp: tx,
                     };
                     self.sender
                         .send(cmd)
                         .await
                         .expect("Could not send request for so status");
-                    assert_eq!(rx.await.unwrap(), ())
                 }
             }
             _ => {}
@@ -265,15 +262,12 @@ impl ChatLoop {
 
     async fn count_bits(&self, msg: &ChatMessage) {
         if let Some(bits) = msg.bits {
-            let (tx, rx) = oneshot::channel();
             let cmd = Command::CountBits {
                 channel: msg.channel_login.clone(),
                 user: msg.sender.login.clone(),
                 bits,
-                resp: tx,
             };
             let _ = self.sender.send(cmd).await;
-            assert_eq!(rx.await.unwrap(), ())
         }
     }
 

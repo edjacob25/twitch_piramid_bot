@@ -144,14 +144,11 @@ impl EventLoop {
     async fn handle_event(&self, m: NotificationMessage) {
         match m.subscription.sub_type {
             EventType::Online => {
-                let (tx, rx) = oneshot::channel();
                 info!("Resetting autoso status for channel {}", m.event.broadcaster_user_name);
                 let cmd = Command::ResetSoStatus {
                     channel: m.event.broadcaster_user_name.clone(),
-                    resp: tx,
                 };
                 let _ = self.sender.send(cmd).await;
-                assert_eq!(rx.await.unwrap(), ());
 
                 send_notification(
                     &self.conf.ntfy,
@@ -160,25 +157,19 @@ impl EventLoop {
                 )
                 .await;
                 info!("Sending true to channel {}", m.event.broadcaster_user_name);
-                let (tx, rx) = oneshot::channel();
                 let cmd = Command::SetChannelStatus {
                     key: m.event.broadcaster_user_name,
                     val: true,
-                    resp: tx,
                 };
                 let _ = self.sender.send(cmd).await;
-                assert_eq!(rx.await.unwrap(), ());
             }
             EventType::Offline => {
                 info!("Sending false to channel {}", m.event.broadcaster_user_name);
-                let (tx, rx) = oneshot::channel();
                 let cmd = Command::SetChannelStatus {
                     key: m.event.broadcaster_user_name,
                     val: false,
-                    resp: tx,
                 };
                 let _ = self.sender.send(cmd).await;
-                assert_eq!(rx.await.unwrap(), ());
             }
             EventType::StreamChange => {
                 let (tx, rx) = oneshot::channel();
@@ -209,26 +200,20 @@ impl EventLoop {
                 info!("{}", msg);
                 send_notification(&self.conf.ntfy, msg, Some(&m.event.broadcaster_user_name.clone())).await;
 
-                let (tx, rx) = oneshot::channel();
                 let cmd = Command::SetStreamInfo {
                     channel: m.event.broadcaster_user_name.clone(),
                     event: m.event,
-                    resp: tx,
                 };
                 let _ = self.sender.send(cmd).await;
-                assert_eq!(rx.await.unwrap(), ());
             }
             EventType::PredictionStart => {
                 let question = m.event.title.unwrap_or("Could not get question".to_string());
                 info!("Starting prediction for {}", m.event.broadcaster_user_name);
-                let (tx, rx) = oneshot::channel();
                 let cmd = Command::StartPrediction {
                     channel: m.event.broadcaster_user_name,
                     question,
-                    resp: tx,
                 };
                 let _ = self.sender.send(cmd).await;
-                assert_eq!(rx.await.unwrap(), ());
             }
             EventType::PredictionProgress => {
                 let options = m.event.outcomes.expect("Poll options have to exist");
@@ -247,24 +232,18 @@ impl EventLoop {
                     })
                     .collect::<Vec<(String, Vec<(String, u32)>)>>();
                 info!("Prediction progress for {}", m.event.broadcaster_user_name);
-                let (tx, rx) = oneshot::channel();
                 let cmd = Command::PredictionProgress {
                     channel: m.event.broadcaster_user_name,
                     responses,
-                    resp: tx,
                 };
                 let _ = self.sender.send(cmd).await;
-                assert_eq!(rx.await.unwrap(), ());
             }
             EventType::PredictionEnd => {
                 info!("Ending prediction for {}", m.event.broadcaster_user_name);
-                let (tx, rx) = oneshot::channel();
                 let cmd = Command::PredictionEnd {
                     channel: m.event.broadcaster_user_name,
-                    resp: tx,
                 };
                 let _ = self.sender.send(cmd).await;
-                assert_eq!(rx.await.unwrap(), ());
             }
             EventType::Other => {}
         }
