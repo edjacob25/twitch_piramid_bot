@@ -17,15 +17,15 @@ fn check_all_column_names() {
     let mut options = Options::default();
     options.create_missing_column_families(true);
     let db = DB::open_cf(&options, "pyramids_test", names).unwrap();
-    let cfs = DB::list_cf(&options, "pyramids_test").unwrap_or(vec![]);
+    let cfs = DB::list_cf(&options, "pyramids_test").unwrap_or_default();
 
     for cf in cfs {
-        let handle = db.cf_handle(&*cf).unwrap();
+        let handle = db.cf_handle(&cf).unwrap();
         for item in db.iterator_cf(handle, IteratorMode::Start) {
             let (key, value) = item.unwrap();
             let key = String::from_utf8(key.into_vec()).unwrap();
             let value = String::from_utf8(value.into_vec()).unwrap();
-            println!("{} has {}", key, value);
+            println!("{key} has {value}");
         }
     }
 }
@@ -36,10 +36,10 @@ fn main() {
     for item in db.iterator(IteratorMode::Start) {
         let (key, value) = item.unwrap();
         let key = String::from_utf8(key.into_vec()).unwrap();
-        let mut parts = key.split(" ");
+        let mut parts = key.split(' ');
         let channel = parts.next().unwrap();
         if last != channel {
-            println!("\nl{}\n----------------------------------------", channel);
+            println!("\nl{channel}\n----------------------------------------");
             last = channel.to_string();
         }
         let value = String::from_utf8(value.into_vec()).unwrap();

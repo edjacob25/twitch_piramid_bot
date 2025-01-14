@@ -84,10 +84,7 @@ pub async fn create_auth_file(config: &BotConfig) {
         config.client_id
     );
 
-    println!(
-        "Please put this link in your browser, authorize and copy back the code: {}",
-        link
-    );
+    println!("Please put this link in your browser, authorize and copy back the code: {link}");
     let mut code = String::new();
     let _b = std::io::stdin().read_line(&mut code).expect("Error reading the line");
     let code = code.trim();
@@ -107,7 +104,7 @@ pub async fn create_auth_file(config: &BotConfig) {
         .await
         .expect("Could not reach oauth token endpoint");
     let json_response = res.text().await.expect("Response was empty");
-    println!("Json {}", json_response);
+    println!("Json {json_response}");
     let decoded_response: GetAccessTokenResponse =
         serde_json::from_str(json_response.as_str()).expect("Could not deserialize into Response");
     let user_access_token: UserAccessToken = UserAccessToken::from(decoded_response);

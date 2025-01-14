@@ -17,8 +17,8 @@ pub enum LoadError {
 impl Display for LoadError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            LoadError::Io(e) => write! {f, "IO error: {} ", e},
-            LoadError::Deserialize(e) => write! {f, "Deserializing error: {} ", e},
+            LoadError::Io(e) => write! {f, "IO error: {e} "},
+            LoadError::Deserialize(e) => write! {f, "Deserializing error: {e} "},
         }
     }
 }
@@ -53,8 +53,8 @@ pub enum UpdateError {
 impl Display for UpdateError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            UpdateError::Io(e) => write! {f, "IO error: {} ", e},
-            UpdateError::Parsing(e) => write! {f, "Parsing error: {} ", e},
+            UpdateError::Io(e) => write! {f, "IO error: {e} "},
+            UpdateError::Parsing(e) => write! {f, "Parsing error: {e} "},
         }
     }
 }

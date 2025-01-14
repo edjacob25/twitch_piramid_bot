@@ -59,7 +59,7 @@ pub enum Command {
     },
     SetStreamInfo {
         channel: String,
-        event: Event,
+        event: Box<Event>,
     },
     CountBits {
         channel: String,
@@ -96,8 +96,7 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
                     let val = *values.first().expect("No bytes retrieved");
                     val > 0
                 }
-                Ok(None) => false,
-                Err(_) => false,
+                Ok(None) | Err(_) => false,
             };
             debug!("Channel {} online status: {}", key, res);
             let _ = resp.send(res);
@@ -114,7 +113,7 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
             resp,
         } => {
             let db = DB::open_default("data/autoso.db").expect("Could not open autoso.db");
-            let key = format!("{} {}", channel, so_channel);
+            let key = format!("{channel} {so_channel}");
             let res = match db.get(&key) {
                 Ok(Some(values)) => {
                     let val = *values.first().expect("No bytes retrieved");
@@ -135,7 +134,7 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
             val,
         } => {
             let db = DB::open_default("data/autoso.db").expect("Could not open autoso.db");
-            let key = format!("{} {}", channel, so_channel);
+            let key = format!("{channel} {so_channel}");
             let savable = if val { vec![1] } else { vec![0] };
             db.put(key, savable).expect("Cannot set online status");
         }
@@ -177,7 +176,7 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
             match content {
                 Ok(str) => fs::write(filename, str).expect("Could not write"),
                 Err(_) => {
-                    error!("Could not parse prediction")
+                    error!("Could not parse prediction");
                 }
             }
         }
@@ -198,7 +197,7 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
             let _ = resp.send(current.clone());
         }
         SetStreamInfo { channel, event } => {
-            streams_data.insert(channel, event);
+            streams_data.insert(channel, *event);
         }
         CountBits { channel, user, bits } => {
             let res = save_bits(channel.as_str(), user.as_str(), bits);

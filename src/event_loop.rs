@@ -181,20 +181,17 @@ impl EventLoop {
                     .send(cmd)
                     .await
                     .expect("Could not send request for channel status");
-                let event = match rx.await {
-                    Ok(res) => res,
-                    Err(_) => panic!("wot m8"),
-                };
+                let Ok(event) = rx.await else { panic!("wot m8") };
 
                 let mut msg = format!("Stream {} is changing info: ", m.event.broadcaster_user_name.clone());
                 let new_title = m.event.title.clone().unwrap();
-                if event.title.unwrap_or("".to_string()) != new_title {
-                    msg = msg.add(&format!("Title -> {}, ", new_title))
+                if event.title.unwrap_or(String::new()) != new_title {
+                    msg = msg.add(&format!("Title -> {new_title}, "));
                 }
 
                 let new_cat = m.event.category_name.clone().unwrap();
-                if event.category_name.unwrap_or("".to_string()) != new_cat {
-                    msg = msg.add(&format!("Category -> {}", new_cat))
+                if event.category_name.unwrap_or(String::new()) != new_cat {
+                    msg = msg.add(&format!("Category -> {new_cat}"));
                 }
 
                 info!("{}", msg);
@@ -202,7 +199,7 @@ impl EventLoop {
 
                 let cmd = Command::SetStreamInfo {
                     channel: m.event.broadcaster_user_name.clone(),
-                    event: m.event,
+                    event: Box::new(m.event),
                 };
                 let _ = self.sender.send(cmd).await;
             }
@@ -263,7 +260,7 @@ impl EventLoop {
                 let channel_configs: HashMap<String, &ChannelConfig> =
                     HashMap::from_iter(self.conf.channels.iter().map(|c| (c.channel_name.clone(), c)));
                 let mut subscription_ids = Vec::new();
-                for (id, name) in self.broadcasters_ids.iter() {
+                for (id, name) in &self.broadcasters_ids {
                     let mut event_data = EventData {
                         event: "stream.online",
                         broadcaster_id: id,
@@ -271,17 +268,17 @@ impl EventLoop {
                         session_id: &m.session.id,
                     };
                     if let Ok(num) = self.register_event(&event_data).await {
-                        subscription_ids.push(num)
+                        subscription_ids.push(num);
                     };
 
                     event_data.event = "stream.offline";
                     if let Ok(num) = self.register_event(&event_data).await {
-                        subscription_ids.push(num)
+                        subscription_ids.push(num);
                     };
 
                     event_data.event = "channel.update";
                     if let Ok(num) = self.register_event(&event_data).await {
-                        subscription_ids.push(num)
+                        subscription_ids.push(num);
                     };
 
                     if channel_configs.contains_key(name)
@@ -293,15 +290,15 @@ impl EventLoop {
                     {
                         event_data.event = "channel.prediction.begin";
                         if let Ok(num) = self.register_event(&event_data).await {
-                            subscription_ids.push(num)
+                            subscription_ids.push(num);
                         };
                         event_data.event = "channel.prediction.progress";
                         if let Ok(num) = self.register_event(&event_data).await {
-                            subscription_ids.push(num)
+                            subscription_ids.push(num);
                         };
                         event_data.event = "channel.prediction.end";
                         if let Ok(num) = self.register_event(&event_data).await {
-                            subscription_ids.push(num)
+                            subscription_ids.push(num);
                         };
                     }
                 }
@@ -309,7 +306,7 @@ impl EventLoop {
                 debug!("Subsciption ids {:?}", subscription_ids);
                 return MessageResponse::ConnectionSuccessful(subscription_ids);
             }
-            MessageType::KeepAlive => {}
+            MessageType::KeepAlive | MessageType::Revocation => {}
             MessageType::Notification => {
                 let m = NotificationMessage::from(msg);
                 self.handle_event(m).await;
@@ -319,7 +316,6 @@ impl EventLoop {
                 error!("Should reconnect");
                 return MessageResponse::Reconnect(m.session.reconnect_url.expect("There was no reconnect url"));
             }
-            MessageType::Revocation => {}
         }
         MessageResponse::Continue
     }
@@ -334,7 +330,7 @@ impl EventLoop {
                     None => {}
                     Some(c) => {
                         error!("Closing reason {}", c);
-                        send_notification(&self.conf.ntfy, format!("Closing connection: {:?}", c), None).await;
+                        send_notification(&self.conf.ntfy, format!("Closing connection: {c:?}"), None).await;
                         if c.reason.contains("4007") {
                             warn!("WTF");
                         }
@@ -365,7 +361,7 @@ impl EventLoop {
                     Err(e) => {
                         send_notification(
                             &self.conf.ntfy,
-                            format!("Could not receive message with error: {:?}", e),
+                            format!("Could not receive message with error: {e:?}"),
                             None,
                         )
                         .await;
@@ -409,7 +405,7 @@ impl EventLoop {
                         //     drop(old_r);
                         //     error!("Closing it and dropping if necessary")
                         // }
-                        for current_subscription in current_subscriptions.iter() {
+                        for current_subscription in &current_subscriptions {
                             warn!("Unregistering subscription {}", current_subscription);
                             if let Err(e) = self.unregister_events(current_subscription).await {
                                 error!("Could not unregister event {} with error {:?}", current_subscription, e);
@@ -433,7 +429,7 @@ impl EventLoop {
 }
 async fn send_notification(ntfy: &Option<Ntfy>, msg: String, login: Option<&str>) {
     if let Some(nt) = ntfy.clone() {
-        let address = login.map(|log| format!("https://www.twitch.tv/{}", log));
+        let address = login.map(|log| format!("https://www.twitch.tv/{log}"));
         tokio::spawn(async move {
             let cl = Client::new();
             let mut req = cl.post(nt.address).basic_auth(nt.user, Some(nt.pass)).body(msg);

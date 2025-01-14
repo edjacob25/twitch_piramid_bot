@@ -73,7 +73,7 @@ impl ChatLoop {
             let channel_name = &channel_to_connect.channel_name;
             pyramids.building_flags.insert(channel_name.clone(), false);
             pyramids.emote_counts.insert(channel_name.clone(), 0usize);
-            pyramids.emotes.insert(channel_name.clone(), "".to_string());
+            pyramids.emotes.insert(channel_name.clone(), String::new());
         }
 
         let channel_configs = conf.channels.iter().fold(HashMap::new(), |mut acc, c| {
@@ -100,9 +100,9 @@ impl ChatLoop {
     async fn say_rate_limited(&self, channel: &str, msg: String) {
         let channel = channel.to_string();
         match self.limiter.check_key(&channel) {
-            Ok(_) => self.cl.say(channel, msg).await.unwrap(),
+            Ok(()) => self.cl.say(channel, msg).await.unwrap(),
             Err(_) => {
-                warn!("Rate limited")
+                warn!("Rate limited");
             }
         }
     }
@@ -116,7 +116,7 @@ impl ChatLoop {
             PyramidAction::Destroy => {
                 self.say_rate_limited(channel, "No".to_string()).await;
             }
-            _ => warn!("Do nothing"),
+            PyramidAction::DoNothing => warn!("Do nothing"),
         }
     }
 
@@ -150,18 +150,17 @@ impl ChatLoop {
             return;
         }
 
-        let as_vec = msg.message_text.split(" ").collect::<Vec<_>>();
+        let as_vec = msg.message_text.split(' ').collect::<Vec<_>>();
         let name = as_vec[as_vec.len() - 2];
         let db = DB::open_default("data/pyramids.db").unwrap();
         let combined = format!("{} {}", msg.channel_login, name);
         let mut num: u32 = match db.get(combined.as_bytes()) {
             Ok(Some(value)) => String::from_utf8(value).unwrap().parse().unwrap(),
-            Ok(None) => 0,
-            Err(_) => 0,
+            Ok(None) | Err(_) => 0,
         };
         num += 1;
-        db.put(combined, format!("{}", num)).expect("Error with db");
-        let message = format!("{} lleva {} piramides", name, num);
+        db.put(combined, format!("{num}")).expect("Error with db");
+        let message = format!("{name} lleva {num} piramides");
         self.say_rate_limited(msg.channel_login.as_str(), message).await;
     }
 
@@ -173,10 +172,10 @@ impl ChatLoop {
         let emote_count = self.pyramids.emote_counts.get_mut(channel).unwrap();
         let emote = self.pyramids.emotes.get_mut(channel).unwrap();
 
-        if !msg.message_text.contains(" ") {
+        if !msg.message_text.contains(' ') {
             *pyramid_building = true;
             *emote_count = 1;
-            *emote = msg.message_text.clone();
+            emote.clone_from(&msg.message_text);
             info!("Single word {}", *emote);
             return;
         }
@@ -185,7 +184,7 @@ impl ChatLoop {
         }
         let emote = emote.clone();
         let num_of_matches = msg.message_text.match_indices(&emote).collect::<Vec<_>>().len();
-        let num_of_words = msg.message_text.split(" ").collect::<Vec<_>>().len();
+        let num_of_words = msg.message_text.split(' ').collect::<Vec<_>>().len();
         if num_of_words != num_of_matches {
             *pyramid_building = false;
             return;
@@ -283,7 +282,7 @@ impl ChatLoop {
                     .permitted_actions
                     .clone();
 
-                for action in actions.iter() {
+                for action in &actions {
                     match action {
                         ChatAction::RespondSomething => {
                             self.respond_something(&msg).await;
@@ -315,10 +314,10 @@ impl ChatLoop {
                 }
                 self.say_rate_limited(&msg.channel_login, format!("!so @{}", msg.sender.login))
                     .await;
-                debug!("{:?}", msg)
+                debug!("{:?}", msg);
             }
             _ => {
-                debug!("{:?}", message)
+                debug!("{:?}", message);
             }
         }
     }
