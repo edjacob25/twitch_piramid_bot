@@ -1,5 +1,8 @@
 use config::Config;
-use simple_logger::SimpleLogger;
+use file_rotate::compression::Compression;
+use file_rotate::suffix::{AppendTimestamp, FileLimit};
+use file_rotate::{ContentLimit, FileRotate, TimeFrequency};
+use simplelog::{ColorChoice, CombinedLogger, ConfigBuilder, TermLogger, TerminalMode, WriteLogger};
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -17,11 +20,27 @@ use twitch_piramid_bot::state_manager::create_state_manager;
 
 #[tokio::main]
 pub async fn main() {
-    SimpleLogger::new()
-        .env()
-        .with_level(log::LevelFilter::Info)
-        .init()
-        .expect("Could not init logger");
+    let logger_conf = ConfigBuilder::new()
+        .set_time_format_rfc3339()
+        .set_target_level(log::LevelFilter::Info)
+        .build();
+    let log_file = FileRotate::new(
+        "data/chat.log",
+        AppendTimestamp::default(FileLimit::Unlimited),
+        ContentLimit::Time(TimeFrequency::Monthly),
+        Compression::None,
+        None,
+    );
+    CombinedLogger::init(vec![
+        TermLogger::new(
+            log::LevelFilter::Info,
+            logger_conf.clone(),
+            TerminalMode::Mixed,
+            ColorChoice::Auto,
+        ),
+        WriteLogger::new(log::LevelFilter::Info, logger_conf, log_file),
+    ])
+    .expect("Could not init logger");
     let settings = Config::builder()
         .add_source(config::File::with_name("data/settings.toml"))
         .build()
