@@ -209,31 +209,7 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
 }
 
 fn save_bits(channel: &str, user: &str, bits: u64) -> Result<()> {
-    let conn = Connection::open("data/data.db").expect("Could not open db");
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS bits (
-                channel  TEXT NOT NULL,
-                date TEXT NOT NULL,
-                unix_time INTEGER NOT NULL,
-                user TEXT NOT NULL,
-                bits INTEGER NOT NULL
-            )",
-        (), // empty list of parameters.
-    )
-    .with_context(|| "Could not create table".to_string())?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS channel_date_idx ON bits(channel, unix_time)",
-        (),
-    )
-    .with_context(|| "Could not create index1".to_string())?;
-    conn.execute("CREATE INDEX IF NOT EXISTS channel_user_idx ON bits(channel, user)", ())
-        .with_context(|| "Could not create index2".to_string())?;
-    conn.execute("CREATE INDEX IF NOT EXISTS channel_user_idx ON bits(channel, user)", ())
-        .with_context(|| "Could not create index3".to_string())?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS channel_user_date_idx ON bits (channel, unix_time, user)",
-        (),
-    )?;
+    let conn = Connection::open("data/data.db").with_context(|| "Could not open db")?;
     let now: DateTime<Local> = Local::now();
     conn.execute(
         "INSERT INTO bits VALUES (?, ?, ?, ?, ?)",
@@ -243,16 +219,45 @@ fn save_bits(channel: &str, user: &str, bits: u64) -> Result<()> {
     Ok(())
 }
 
+fn initialize_db() -> Result<()> {
+    let conn = Connection::open("data/data.db").with_context(|| "Could not open db")?;
+
+    // Bits data
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS bits (
+                channel TEXT NOT NULL,
+                date TEXT NOT NULL,
+                unix_time INTEGER NOT NULL,
+                user TEXT NOT NULL,
+                bits INTEGER NOT NULL
+            )",
+        (),
+    )
+    .with_context(|| "Could not create bits table".to_string())?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS channel_date_idx ON bits(channel, unix_time)",
+        (),
+    )
+    .with_context(|| "Could not create index1".to_string())?;
+
+    conn.execute("CREATE INDEX IF NOT EXISTS channel_user_idx ON bits(channel, user)", ())
+        .with_context(|| "Could not create index2".to_string())?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS channel_user_date_idx ON bits (channel, unix_time, user)",
+        (),
+    )
+    .with_context(|| "Could not create index3".to_string())?;
+    Ok(())
+}
+
 pub fn create_state_manager(conf: Arc<BotConfig>, mut receiver: Receiver<Command>) -> JoinHandle<()> {
     tokio::spawn(async move {
-        let user_query = conf
-            .channels
-            .iter()
-            .map(|c| c.channel_name.as_str())
-            .map(|c| ("user_login", c))
-            .collect::<Vec<_>>();
         info!("Starting manager");
         let db = DB::open_default("data/online.db").expect("Could not open online.db");
+        initialize_db().expect("Could not initialize db");
+
         conf.channels
             .iter()
             .map(|c| c.channel_name.as_str())
@@ -264,6 +269,13 @@ pub fn create_state_manager(conf: Arc<BotConfig>, mut receiver: Receiver<Command
         let mut storage = CustomTokenStorage {
             location: conf.credentials_file.clone(),
         };
+
+        let user_query = conf
+            .channels
+            .iter()
+            .map(|c| c.channel_name.as_str())
+            .map(|c| ("user_login", c))
+            .collect::<Vec<_>>();
         let res = http_client
             .get("https://api.twitch.tv/helix/streams")
             .bearer_auth(
