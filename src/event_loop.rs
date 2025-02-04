@@ -1,4 +1,4 @@
-use crate::bot_config::{BotConfig, ChannelConfig, Ntfy};
+use crate::bot_config::{BotConfig, Ntfy};
 use crate::bot_token_storage::CustomTokenStorage;
 use crate::event_data::*;
 use crate::state_manager::Command;
@@ -257,53 +257,7 @@ impl EventLoop {
                 }
 
                 let m = WelcomeMessage::from(msg.payload);
-                let channel_configs: HashMap<String, &ChannelConfig> =
-                    HashMap::from_iter(self.conf.channels.iter().map(|c| (c.channel_name.clone(), c)));
-                let mut subscription_ids = Vec::new();
-                for (id, name) in &self.broadcasters_ids {
-                    let mut event_data = EventData {
-                        event: "stream.online",
-                        broadcaster_id: id,
-                        name,
-                        session_id: &m.session.id,
-                    };
-                    if let Ok(num) = self.register_event(&event_data).await {
-                        subscription_ids.push(num);
-                    };
-
-                    event_data.event = "stream.offline";
-                    if let Ok(num) = self.register_event(&event_data).await {
-                        subscription_ids.push(num);
-                    };
-
-                    event_data.event = "channel.update";
-                    if let Ok(num) = self.register_event(&event_data).await {
-                        subscription_ids.push(num);
-                    };
-
-                    if channel_configs.contains_key(name)
-                        && channel_configs
-                            .get(name)
-                            .unwrap()
-                            .prediction_monitoring
-                            .unwrap_or(false)
-                    {
-                        event_data.event = "channel.prediction.begin";
-                        if let Ok(num) = self.register_event(&event_data).await {
-                            subscription_ids.push(num);
-                        };
-                        event_data.event = "channel.prediction.progress";
-                        if let Ok(num) = self.register_event(&event_data).await {
-                            subscription_ids.push(num);
-                        };
-                        event_data.event = "channel.prediction.end";
-                        if let Ok(num) = self.register_event(&event_data).await {
-                            subscription_ids.push(num);
-                        };
-                    }
-                }
-
-                debug!("Subsciption ids {:?}", subscription_ids);
+                let subscription_ids = self.handle_welcome_message(m).await;
                 return MessageResponse::ConnectionSuccessful(subscription_ids);
             }
             MessageType::KeepAlive | MessageType::Revocation => {}
@@ -318,6 +272,39 @@ impl EventLoop {
             }
         }
         MessageResponse::Continue
+    }
+
+    async fn handle_welcome_message(&self, m: WelcomeMessage) -> Vec<String> {
+        let channel_configs: HashMap<_, _> = self.conf.channels.iter().map(|c| (c.channel_name.clone(), c)).collect();
+        let mut subscription_ids = Vec::new();
+        for (id, name) in &self.broadcasters_ids {
+            let mut event_data = EventData {
+                event: "",
+                broadcaster_id: id,
+                name,
+                session_id: &m.session.id,
+            };
+            let mut events = vec!["stream.online", "stream.offline", "channel.update"];
+
+            if let Some(chanel) = channel_configs.get(name) {
+                if chanel.prediction_monitoring.unwrap_or(false) {
+                    events.extend([
+                        "channel.prediction.begin",
+                        "channel.prediction.progress",
+                        "channel.prediction.end",
+                    ]);
+                }
+            }
+            for event in events {
+                event_data.event = event;
+                if let Ok(num) = self.register_event(&event_data).await {
+                    subscription_ids.push(num);
+                };
+            }
+        }
+
+        debug!("Subsciption ids {:?}", subscription_ids);
+        subscription_ids
     }
 
     async fn process_message(&self, m: Message, reconnecting: bool) -> MessageResponse {
