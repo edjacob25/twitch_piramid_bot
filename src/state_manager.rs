@@ -19,6 +19,8 @@ use twitch_irc::login::TokenStorage;
 
 type Responder<T> = oneshot::Sender<T>;
 
+const DB_NAME: &str = "data/data.db";
+
 #[derive(Debug)]
 pub enum Command {
     GetChannelStatus {
@@ -209,7 +211,7 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
 }
 
 fn save_bits(channel: &str, user: &str, bits: u64) -> Result<()> {
-    let conn = Connection::open("data/data.db").with_context(|| "Could not open db")?;
+    let conn = Connection::open(DB_NAME).with_context(|| "Could not open db")?;
     let now: DateTime<Local> = Local::now();
     conn.execute(
         "INSERT INTO bits VALUES (?, ?, ?, ?, ?)",
@@ -220,17 +222,17 @@ fn save_bits(channel: &str, user: &str, bits: u64) -> Result<()> {
 }
 
 fn initialize_db() -> Result<()> {
-    let conn = Connection::open("data/data.db").with_context(|| "Could not open db")?;
+    let conn = Connection::open(DB_NAME).with_context(|| "Could not open db")?;
 
     // Bits data
     conn.execute(
         "CREATE TABLE IF NOT EXISTS bits (
-                channel TEXT NOT NULL,
-                date TEXT NOT NULL,
-                unix_time INTEGER NOT NULL,
-                user TEXT NOT NULL,
-                bits INTEGER NOT NULL
-            )",
+            channel TEXT NOT NULL,
+            date TEXT NOT NULL,
+            unix_time INTEGER NOT NULL,
+            user TEXT NOT NULL,
+            bits INTEGER NOT NULL
+        )",
         (),
     )
     .with_context(|| "Could not create bits table".to_string())?;
@@ -249,6 +251,50 @@ fn initialize_db() -> Result<()> {
         (),
     )
     .with_context(|| "Could not create index3".to_string())?;
+
+    // Pyramids data
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS pyramids (
+            channel TEXT NOT NULL,
+            person TEXT NOT NULL,
+            count INTEGER DEFAULT 1
+        )",
+        (),
+    )
+    .with_context(|| "Could not create pyramids table".to_string())?;
+
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS pyramids_idx ON pyramids (channel, person)",
+        (),
+    )
+    .with_context(|| "Could not create pyramids index".to_string())?;
+
+    // Online data
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS channel (
+            name TEXT PRIMARY KEY,
+            online BOOLEAN NOT NULL
+        )",
+        (),
+    )
+    .with_context(|| "Could not create channel table".to_string())?;
+
+    // AutoSO
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS autoso (
+            channel TEXT NOT NULL,
+            recipient TEXT NOT NULL,
+            done BOOLEAN NOT NULL
+        )",
+        (),
+    )
+    .with_context(|| "Could not create autoso table".to_string())?;
+
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS autoso_idx ON autoso (channel, recipient)",
+        (),
+    )
+    .with_context(|| "Could not create autoso index".to_string())?;
     Ok(())
 }
 
