@@ -117,20 +117,15 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
             so_channel,
             resp,
         } => {
-            let db = DB::open_default("data/autoso.db").expect("Could not open autoso.db");
-            let key = format!("{channel} {so_channel}");
-            let res = match db.get(&key) {
-                Ok(Some(values)) => {
-                    let val = *values.first().expect("No bytes retrieved");
-                    val > 0
-                }
-                Ok(None) => {
-                    db.put(&key, vec![0]).expect("Could not create db row");
-                    false
-                }
-                Err(_) => false,
-            };
-            debug!("In channel {}, so_channel {} has status: {}", channel, so_channel, res);
+            let conn = Connection::open(DB_NAME).expect("Could not open db");
+            let res = conn
+                .query_row_and_then(
+                    "SELECT done FROM autoso WHERE channel = ?1 AND recipient = ?2",
+                    [&channel, &so_channel],
+                    |row| row.get(0),
+                )
+                .unwrap_or_default();
+            debug!("In channel {channel}, so_channel {so_channel} has status: {res}");
             let _ = resp.send(res);
         }
         SetSoStatus {
@@ -138,21 +133,18 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
             so_channel,
             val,
         } => {
-            let db = DB::open_default("data/autoso.db").expect("Could not open autoso.db");
-            let key = format!("{channel} {so_channel}");
-            let savable = if val { vec![1] } else { vec![0] };
-            db.put(key, savable).expect("Cannot set online status");
+            let conn = Connection::open(DB_NAME).expect("Could not open db");
+            if let Err(e) = conn.execute(
+                "INSERT INTO autoso VALUES (?1, ?2, ?3) ON CONFLICT(channel, recipient) DO UPDATE SET done='?3'",
+                params![channel, so_channel, val],
+            ) {
+                error!("Could not set autoso status on channel {}: {}", channel, e);
+            };
         }
         ResetSoStatus { channel } => {
-            let db = DB::open_default("data/autoso.db").expect("Could not open autoso.db");
-            let it = db.iterator(IteratorMode::From(channel.as_ref(), Forward));
-            for v in it {
-                let (key, _) = v.expect("Error reading db");
-                let key = String::from_utf8(key.into_vec()).expect("Could not parse key");
-                if !key.starts_with(&channel) {
-                    break;
-                }
-                db.put(key, vec![0]).expect("Could not set row to false ");
+            let conn = Connection::open(DB_NAME).expect("Could not open db");
+            if let Err(e) = conn.execute("UPDATE autoso SET done = FALSE WHERE channel = ?1", [&channel]) {
+                error!("Could not reset autoso status on channel {channel}: {e}");
             }
         }
         StartPrediction { channel, question } => {
