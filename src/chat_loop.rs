@@ -8,7 +8,6 @@ use governor::state::keyed::DefaultKeyedStateStore;
 use governor::state::RateLimiter;
 use governor::Quota;
 use log::{debug, info, warn};
-use rocksdb::DB;
 use std::collections::HashMap;
 use std::num::NonZeroU32;
 use std::sync::Arc;
@@ -152,14 +151,15 @@ impl ChatLoop {
 
         let as_vec = msg.message_text.split(' ').collect::<Vec<_>>();
         let name = as_vec[as_vec.len() - 2];
-        let db = DB::open_default("data/pyramids.db").unwrap();
-        let combined = format!("{} {}", msg.channel_login, name);
-        let mut num: u32 = match db.get(combined.as_bytes()) {
-            Ok(Some(value)) => String::from_utf8(value).unwrap().parse().unwrap(),
-            Ok(None) | Err(_) => 0,
+
+        let (tx, rx) = oneshot::channel();
+        let cmd = Command::IncrementPyramid {
+            channel: msg.channel_login.clone(),
+            user: name.to_string(),
+            resp: tx,
         };
-        num += 1;
-        db.put(combined, format!("{num}")).expect("Error with db");
+        let _ = self.sender.send(cmd).await;
+        let num = rx.await.unwrap_or(0);
         let message = format!("{name} lleva {num} piramides");
         self.say_rate_limited(msg.channel_login.as_str(), message).await;
     }
