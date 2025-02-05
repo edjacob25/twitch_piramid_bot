@@ -107,9 +107,8 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
         SetChannelStatus { key, val } => {
             let conn = Connection::open(DB_NAME).expect("Could not open db");
             debug!("Setting channel {} online status: {}", key, val);
-            match conn.execute("UPDATE channel SET online = ?1 WHERE name = ?2", params![val, key]) {
-                Ok(_) => {}
-                Err(e) => { error!("Could not update channel status: {e}")}
+            if let Err(e) = conn.execute("UPDATE channel SET online = ?1 WHERE name = ?2", params![val, key]) {
+                error!("Could not update channel status: {e}");
             }
         }
         GetSoStatus {
