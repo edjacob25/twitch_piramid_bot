@@ -5,8 +5,6 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Local, Utc};
 use log::{debug, error, info};
 use reqwest::Client;
-use rocksdb::Direction::Forward;
-use rocksdb::{IteratorMode, DB};
 use rusqlite::{params, Connection};
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -319,14 +317,19 @@ fn initialize_db() -> Result<()> {
 pub fn create_state_manager(conf: Arc<BotConfig>, mut receiver: Receiver<Command>) -> JoinHandle<()> {
     tokio::spawn(async move {
         info!("Starting manager");
-        let db = DB::open_default("data/online.db").expect("Could not open online.db");
         initialize_db().expect("Could not initialize db");
 
+        let conn = Connection::open(DB_NAME).expect("Could not open db");
         conf.channels
             .iter()
             .map(|c| c.channel_name.as_str())
             .for_each(|channel| {
-                db.put(channel, vec![0]).expect("Could not set db");
+                if let Err(e) = conn.execute(
+                    "INSERT INTO channel VALUES (?1, FALSE) ON CONFLICT(name) DO UPDATE SET online=FALSE",
+                    [channel],
+                ) {
+                    error!("Could not insert {channel}: {e}");
+                };
             });
 
         let http_client = Client::new();
@@ -361,9 +364,11 @@ pub fn create_state_manager(conf: Arc<BotConfig>, mut receiver: Receiver<Command
 
         let online_channels: ChannelsResponse = serde_json::from_str(&res).expect("Could not parse channel data");
         for c in online_channels.data {
-            db.put(c.user_login, vec![1]).expect("Could not put online channels");
+            if let Err(e) = conn.execute("UPDATE channel SET online = TRUE WHERE name = ?1", [&c.user_login]) {
+                error!("Could not update channel {} status: {}", c.user_login, e);
+            }
         }
-        drop(db);
+        conn.close().expect("Could not close DB");
         info!("Starting to receive messages");
         let mut streams_data = HashMap::new();
         while let Some(cmd) = receiver.recv().await {
