@@ -7,7 +7,7 @@ use log::{debug, error, info};
 use reqwest::Client;
 use rocksdb::Direction::Forward;
 use rocksdb::{IteratorMode, DB};
-use rusqlite::Connection;
+use rusqlite::{params, Connection};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
@@ -97,22 +97,20 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
     use Command::*;
     match cmd {
         GetChannelStatus { key, resp } => {
-            let db = DB::open_default("data/online.db").expect("Could not open online.db");
-            let res = match db.get(&key) {
-                Ok(Some(values)) => {
-                    let val = *values.first().expect("No bytes retrieved");
-                    val > 0
-                }
-                Ok(None) | Err(_) => false,
-            };
+            let conn = Connection::open(DB_NAME).expect("Could not open db");
+            let res = conn
+                .query_row_and_then("SELECT online FROM channel WHERE name = ?1", [&key], |row| row.get(0))
+                .unwrap_or_default();
             debug!("Channel {} online status: {}", key, res);
             let _ = resp.send(res);
         }
         SetChannelStatus { key, val } => {
-            let db = DB::open_default("data/online.db").expect("Could not open online.db");
+            let conn = Connection::open(DB_NAME).expect("Could not open db");
             debug!("Setting channel {} online status: {}", key, val);
-            let savable = if val { vec![1] } else { vec![0] };
-            db.put(key, savable).expect("Cannot set online status");
+            match conn.execute("UPDATE channel SET online = ?1 WHERE name = ?2", params![val, key]) {
+                Ok(_) => {}
+                Err(e) => { error!("Could not update channel status: {e}")}
+            }
         }
         GetSoStatus {
             channel,
