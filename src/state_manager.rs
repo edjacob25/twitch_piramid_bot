@@ -68,6 +68,11 @@ pub enum Command {
         user: String,
         bits: u64,
     },
+    IncrementPyramid {
+        channel: String,
+        user: String,
+        resp: Responder<i32>,
+    },
 }
 
 #[derive(Debug, Deserialize)]
@@ -207,7 +212,31 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
                 error!("Could not save bits {:?}", e);
             }
         }
+        IncrementPyramid { channel, user, resp } => {
+            let res = increment_pyramid_count(channel, user).unwrap_or_else(|e| {
+                error!("Error when incrementing the pyramid: {e}");
+                0
+            });
+            let _ = resp.send(res);
+        }
     }
+}
+
+fn increment_pyramid_count(channel: String, user: String) -> Result<i32> {
+    let conn = Connection::open(DB_NAME).expect("Could not open db");
+    conn.execute(
+        "INSERT INTO pyramids (channel, person) VALUES (?1, ?2) ON CONFLICT(channel, person) DO UPDATE SET count=count+1",
+        params![channel, user],
+    )
+        .with_context(|| "Cannot increment pyramid count")?;
+    let res = conn
+        .query_row_and_then(
+            "SELECT count FROM pyramids WHERE channel = ?1 AND person = ?2",
+            [&channel, &user],
+            |row| row.get(0),
+        )
+        .with_context(|| "Could not retrieve pyramid count")?;
+    Ok(res)
 }
 
 fn save_bits(channel: &str, user: &str, bits: u64) -> Result<()> {
