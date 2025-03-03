@@ -20,6 +20,7 @@ use twitch_piramid_bot::state_manager::create_state_manager;
 
 #[tokio::main]
 pub async fn main() {
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
     let logger_conf = ConfigBuilder::new()
         .set_time_format_rfc3339()
         .set_target_level(log::LevelFilter::Info)

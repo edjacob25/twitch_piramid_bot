@@ -8,27 +8,34 @@ default-run = "twitch_piramid_bot"
 
 [dependencies]
 anyhow = "1.0"
-askama = {version = "0.12", optional = true }
+askama = { version = "0.12", optional = true }
 async-trait = "0.1"
-axum = {version = "0.8", optional = true }
-chrono = {version = "0.4", features = ["serde"]}
-config = {version = "0.15", features = ["toml"]}
+axum = { version = "0.8", optional = true }
+chrono = { version = "0.4", features = ["serde"] }
+config = { version = "0.15", features = ["toml"] }
 file-rotate = "0.7"
 futures-util = "0.3"
 governor = "0.8"
 log = "0.4"
 rand = "0.8"
 regex = "1.11"
-reqwest = { version = "0.12", features = ["json"] }
-rusqlite = "0.32"
+reqwest = { version = "0.11", features = [
+  "json",
+  "rustls-tls",
+], default-features = false }
+rusqlite = { version = "0.33", features = ['bundled'] }
+rustls = "0.23.23"
 serde = "1.0"
 serde_json = "1.0"
 serde_regex = "1.1"
 simplelog = "0.12"
 tokio = { version = "1", features = ["rt-multi-thread"] }
-tokio-tungstenite = { version = "0.26", features = ["native-tls"] }
+tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
 toml = "0.8"
-twitch-irc = { version = "5.0", features = ["transport-ws-native-tls", "refreshing-token-native-tls"] }
+twitch-irc = { version = "5.0", features = [
+  "transport-ws-rustls-webpki-roots",
+  "refreshing-token-rustls-webpki-roots",
+], default-features = false }
 
 [features]
 web = ["axum", "askama"]
