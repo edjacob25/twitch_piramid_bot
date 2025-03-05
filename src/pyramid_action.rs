@@ -1,4 +1,4 @@
-use rand::distributions::{Distribution, Standard};
+use rand::distr::{Distribution, StandardUniform};
 use rand::Rng;
 
 pub enum PyramidAction {
@@ -7,9 +7,9 @@ pub enum PyramidAction {
     Destroy,
 }
 
-impl Distribution<PyramidAction> for Standard {
+impl Distribution<PyramidAction> for StandardUniform {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> PyramidAction {
-        match rng.gen_range(0..=9) {
+        match rng.random_range(0..=9) {
             0..=3 => PyramidAction::DoNothing,
             4..=7 => PyramidAction::Steal,
             _ => PyramidAction::Destroy,
