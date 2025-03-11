@@ -1,5 +1,5 @@
-use rand::distr::{Distribution, StandardUniform};
 use rand::Rng;
+use rand::distr::{Distribution, StandardUniform};
 
 pub enum PyramidAction {
     DoNothing,

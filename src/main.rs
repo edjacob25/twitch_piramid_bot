@@ -6,12 +6,12 @@ use simplelog::{ColorChoice, CombinedLogger, ConfigBuilder, TermLogger, Terminal
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use twitch_irc::login::{
-    GetAccessTokenResponse, LoginCredentials, RefreshingLoginCredentials, TokenStorage, UserAccessToken,
-};
 use twitch_irc::ClientConfig;
 use twitch_irc::SecureWSTransport;
 use twitch_irc::TwitchIRCClient;
+use twitch_irc::login::{
+    GetAccessTokenResponse, LoginCredentials, RefreshingLoginCredentials, TokenStorage, UserAccessToken,
+};
 use twitch_piramid_bot::bot_config::BotConfig;
 use twitch_piramid_bot::bot_token_storage::CustomTokenStorage;
 use twitch_piramid_bot::chat_loop::message_loop;

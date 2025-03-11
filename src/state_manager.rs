@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Local, Utc};
 use log::{debug, error, info};
 use reqwest::Client;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
