@@ -3,6 +3,7 @@ use crate::bot_token_storage::CustomTokenStorage;
 use crate::chat_action::ChatAction;
 use crate::pyramid_action::PyramidAction;
 use crate::state_manager::Command;
+use anyhow::{Result, bail};
 use governor::Quota;
 use governor::clock::DefaultClock;
 use governor::state::RateLimiter;
@@ -274,13 +275,50 @@ impl ChatLoop {
         let channel = &msg.channel_login;
         let user = msg.sender.login.clone();
         match msg.message_text.as_str().trim() {
-            s if s.starts_with("!crear") => {}
             s if s.starts_with("!entrar") => {}
+            s if s.starts_with("!crear") => self.create_queue(&user, &channel, s).await,
             "!salir" => {}
             "!confirmar" => {}
             "!equipos" => {},
             _ => {}
         }
+    }
+
+    fn parse_create_opts(msg: &str) -> Result<(u8, u8)> {
+        let split = msg.trim().split(' ').collect::<Vec<_>>();
+        if split.len() < 3 {
+            bail!("Invalid number of options {}", split.len());
+        }
+        let num_teams = split[1].parse::<u8>()?;
+        let num_persons = split[2].parse::<u8>()?;
+        Ok((num_teams, num_persons))
+    }
+
+    async fn create_queue(&self, user: &str, channel: &str, msg: &str) {
+        if user != channel {
+            return;
+        }
+        if let Ok((teams, per_team)) = Self::parse_create_opts(msg) {
+            let _ = self
+                .sender
+                .send(Command::CreateQueue {
+                    channel: channel.to_string(),
+                    teams,
+                    per_team,
+                })
+                .await;
+            self.say_rate_limited(
+                channel,
+                format!("Creados {teams} equipos, con {per_team} jugadores cada uno"),
+            )
+            .await;
+            return;
+        }
+        self.say_rate_limited(
+            channel,
+            "Error al llamar el comando !crear, prueba con algo como '!crear 3 3' ".to_string(),
+        )
+        .await
     }
 
     async fn process_twitch_message(&mut self, message: ServerMessage) {
