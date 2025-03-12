@@ -265,8 +265,29 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
         ConfirmUser { .. } => {}
         RemoveFromQueue { .. } => {}
         MoveToOtherTeam { .. } => {}
-        ShowQueue { .. } => {}
+        ShowQueue { channel, resp } => {
+            let res = get_queue(&channel).unwrap_or_default();
+            let _ = resp.send(res);
+        }
+
     }
+}
+
+fn get_queue(channel: &str) -> Result<Queue> {
+    let conn = Connection::open(DB_NAME).expect("Could not open db");
+    conn.query_row_and_then(
+        "SELECT no_teams, team_size, teams FROM queue WHERE channel = ?1",
+        [channel],
+        |row| {
+            let teams_str: String = row.get(2)?;
+            let teams: Vec<Team> = serde_json::from_str(&teams_str)?;
+            Ok(Queue {
+                size: row.get(0)?,
+                team_size: row.get(1)?,
+                teams: teams,
+            })
+        },
+    )
 }
 
 fn increment_pyramid_count(channel: String, user: String) -> Result<i32> {

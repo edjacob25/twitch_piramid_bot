@@ -279,7 +279,7 @@ impl ChatLoop {
             s if s.starts_with("!crear") => self.create_queue(&user, &channel, s).await,
             "!salir" => {}
             "!confirmar" => {}
-            "!equipos" => {},
+            "!equipos" => self.show_queue(&channel).await,
             _ => {}
         }
     }
@@ -319,6 +319,23 @@ impl ChatLoop {
             "Error al llamar el comando !crear, prueba con algo como '!crear 3 3' ".to_string(),
         )
         .await
+    }
+
+    async fn show_queue(&self, channel: &str) {
+        let (tx, rx) = oneshot::channel();
+        let _ = self
+            .sender
+            .send(Command::ShowQueue {
+                channel: channel.to_string(),
+                resp: tx,
+            })
+            .await;
+        if let Ok(queue) = rx.await {
+            self.say_rate_limited(channel, format!("{queue}")).await;
+        } else {
+            self.say_rate_limited(channel, "No se pueden mostrar equipos por el momento".to_string())
+                .await;
+        }
     }
 
     async fn process_twitch_message(&mut self, message: ServerMessage) {
