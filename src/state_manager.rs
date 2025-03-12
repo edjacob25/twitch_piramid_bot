@@ -239,9 +239,29 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
             });
             let _ = resp.send(res);
         }
-        CreateQueue { .. } => {}
-        ResetQueue { .. } => {}
         AddToQueue { .. } => {}
+        CreateQueue {
+            channel,
+            teams,
+            per_team,
+        } => {
+            let conn = Connection::open(DB_NAME).expect("Could not open db");
+            if let Err(e) = conn.execute(
+                "INSERT INTO queue VALUES (?1, ?2, ?3, json_array()) ON CONFLICT(channel) DO UPDATE SET no_teams=?2, team_size=?3, teams=json_array()",
+                params![channel, teams, per_team],
+            ) {
+                error!("Could not reset queue on channel {}: {}", channel, e);
+            };
+        }
+        ResetQueue { channel } => {
+            let conn = Connection::open(DB_NAME).expect("Could not open db");
+            if let Err(e) = conn.execute(
+                "INSERT INTO queue VALUES (?1, 0, 0, json_array()) ON CONFLICT(channel) DO UPDATE SET no_teams=0, team_size=0, teams=json_array()",
+                params![channel],
+            ) {
+                error!("Could not reset queue on channel {}: {}", channel, e);
+            };
+        }
         ConfirmUser { .. } => {}
         RemoveFromQueue { .. } => {}
         MoveToOtherTeam { .. } => {}
