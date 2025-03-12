@@ -1,5 +1,6 @@
 use crate::bot_config::BotConfig;
 use crate::bot_token_storage::CustomTokenStorage;
+use crate::teams::{Member, Queue, Team};
 use crate::twitch_ws::Event;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Local, Utc};
@@ -70,6 +71,38 @@ pub enum Command {
         channel: String,
         user: String,
         resp: Responder<i32>,
+    },
+    CreateQueue {
+        channel: String,
+        teams: u8,
+        per_team: u8,
+    },
+    ResetQueue {
+        channel: String,
+    },
+    AddToQueue {
+        channel: String,
+        user: String,
+        second_user: Option<String>,
+        team: Option<u8>,
+        resp: Responder<bool>,
+    },
+    ConfirmUser {
+        channel: String,
+        user: String,
+    },
+    RemoveFromQueue {
+        channel: String,
+        user: String,
+    },
+    MoveToOtherTeam {
+        channel: String,
+        user: String,
+        team: u8,
+    },
+    ShowQueue {
+        channel: String,
+        resp: Responder<Queue>,
     },
 }
 
@@ -206,6 +239,13 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
             });
             let _ = resp.send(res);
         }
+        CreateQueue { .. } => {}
+        ResetQueue { .. } => {}
+        AddToQueue { .. } => {}
+        ConfirmUser { .. } => {}
+        RemoveFromQueue { .. } => {}
+        MoveToOtherTeam { .. } => {}
+        ShowQueue { .. } => {}
     }
 }
 
