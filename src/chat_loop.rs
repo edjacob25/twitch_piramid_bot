@@ -275,8 +275,8 @@ impl ChatLoop {
         let channel = &msg.channel_login;
         let user = msg.sender.login.clone();
         match msg.message_text.as_str().trim() {
-            s if s.starts_with("!entrar") => {}
             s if s.starts_with("!crear") => self.create_queue(&user, &channel, s).await,
+            s if s.starts_with("!entrar") => self.join_queue(user, &channel, s).await,
             "!salir" => {}
             "!confirmar" => {}
             "!equipos" => self.show_queue(&channel).await,
@@ -319,6 +319,44 @@ impl ChatLoop {
             "Error al llamar el comando !crear, prueba con algo como '!crear 3 3' ".to_string(),
         )
         .await
+    }
+
+    fn parse_join_opts(msg: &str) -> (Option<String>, Option<u8>) {
+        let split = msg.trim().split(' ').collect::<Vec<_>>();
+        let len = split.len();
+        if len == 1 {
+            return (None, None);
+        }
+        if len == 2 {
+            if let Ok(num) = split[1].parse::<u8>() {
+                return (None, Some(num));
+            }
+            return (Some(split[1].to_string()), None);
+        }
+
+        let preferred_team = split[2].parse::<u8>().ok();
+        (Some(split[1].to_string()), preferred_team)
+    }
+
+    async fn join_queue(&self, user: String, channel: &str, msg: &str) {
+        let (extra, team) = Self::parse_join_opts(msg);
+        let (tx, rx) = oneshot::channel();
+        let cmd = Command::AddToQueue {
+            channel: channel.to_string(),
+            user,
+            second_user: extra,
+            team,
+            resp: tx,
+        };
+        let _ = self.sender.send(cmd).await;
+        let success = rx.await.unwrap_or(false);
+        if !success {
+            self.say_rate_limited(channel, "No se pudo antoar para el equipo x".to_string())
+                .await;
+            return;
+        }
+        self.say_rate_limited(channel, "Anotado  para el equipo x".to_string())
+            .await;
     }
 
     async fn show_queue(&self, channel: &str) {

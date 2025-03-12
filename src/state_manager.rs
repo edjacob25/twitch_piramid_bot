@@ -1,8 +1,9 @@
 use crate::bot_config::BotConfig;
 use crate::bot_token_storage::CustomTokenStorage;
+use crate::teams::Status::{Confirmed, Unconfirmed};
 use crate::teams::{Member, Queue, Team};
 use crate::twitch_ws::Event;
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Local, Utc};
 use log::{debug, error, info};
 use reqwest::Client;
@@ -239,7 +240,6 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
             });
             let _ = resp.send(res);
         }
-        AddToQueue { .. } => {}
         CreateQueue {
             channel,
             teams,
@@ -262,6 +262,19 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
                 error!("Could not reset queue on channel {}: {}", channel, e);
             };
         }
+        AddToQueue {
+            channel,
+            user,
+            second_user,
+            team,
+            resp,
+        } => match add_to_queue(&channel, user.clone(), second_user, team) {
+            Ok(_) => resp.send(true).unwrap_or_default(),
+            Err(e) => {
+                error!("Could not add user(s) {user} {}: {}", channel, e);
+                let _ = resp.send(false);
+            }
+        },
         ConfirmUser { .. } => {}
         RemoveFromQueue { .. } => {}
         MoveToOtherTeam { .. } => {}
@@ -288,6 +301,69 @@ fn get_queue(channel: &str) -> Result<Queue> {
             })
         },
     )
+}
+
+fn add_to_queue(channel: &str, user: String, second_user: Option<String>, preferred_team: Option<u8>) -> Result<()> {
+    let conn = Connection::open(DB_NAME).expect("Could not open db");
+    let mut queue = get_queue(channel)?;
+    let mut users = 2u8;
+    let second_user = second_user.unwrap_or_else(|| {
+        users = 1;
+        "".to_string()
+    });
+
+    let mut free_spaces = vec![];
+    let mut found_already = false;
+    for team in queue.teams.iter() {
+        free_spaces.push(queue.team_size - team.members.len() as u8);
+        let names = team.members.iter().map(|x| x.name.as_str()).collect::<Vec<_>>();
+        if names.contains(&user.as_str()) || (users == 2 && names.contains(&second_user.as_str())) {
+            found_already = true;
+        }
+    }
+    if found_already {
+        bail!("Already found in queue");
+    }
+
+    let mut chosen_idx = None;
+    if let Some(preferred_team) = preferred_team {
+        let real_idx = (preferred_team - 1) as usize;
+        if free_spaces[real_idx] >= users {
+            chosen_idx = Some(real_idx);
+        }
+    }
+
+    if chosen_idx.is_none() {
+        for (idx, team_free_space) in free_spaces.iter().enumerate() {
+            if *team_free_space >= users {
+                chosen_idx = Some(idx);
+                break;
+            }
+        }
+    }
+    if let Some(chosen_idx) = chosen_idx {
+        queue.teams[chosen_idx].members.push(Member {
+            name: user,
+            status: Confirmed,
+        });
+        if users == 2 {
+            queue.teams[chosen_idx].members.push(Member {
+                name: second_user.to_string(),
+                status: Unconfirmed,
+            });
+        }
+        let str = serde_json::to_string(&queue.teams)?;
+        if let Err(e) = conn.execute(
+            "UPDATE queue SET teams = json(?2) WHERE channel = ?1",
+            params![channel, str],
+        ) {
+            error!("Could not reset queue on channel {}: {}", channel, e);
+        };
+    } else {
+        println!("COuld not join any team");
+        bail!("Could not join any team");
+    }
+    Ok(())
 }
 
 fn increment_pyramid_count(channel: String, user: String) -> Result<i32> {
