@@ -311,6 +311,19 @@ fn initialize_db() -> Result<()> {
         (),
     )
     .with_context(|| "Could not create autoso index".to_string())?;
+
+    // Teams
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS queue (
+            channel TEXT PRIMARY KEY,
+            no_teams INTEGER NOT NULL,
+            team_size INTEGER NOT NULL,
+            teams TEXT NOT NULL
+        )",
+        (),
+    )
+    .with_context(|| "Could not create queue table".to_string())?;
+
     Ok(())
 }
 
