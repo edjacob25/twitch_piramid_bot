@@ -270,6 +270,19 @@ impl ChatLoop {
         }
     }
 
+    async fn handle_queue(&mut self, msg: &ChatMessage) {
+        let channel = &msg.channel_login;
+        let user = msg.sender.login.clone();
+        match msg.message_text.as_str().trim() {
+            s if s.starts_with("!crear") => {}
+            s if s.starts_with("!entrar") => {}
+            "!salir" => {}
+            "!confirmar" => {}
+            "!equipos" => {},
+            _ => {}
+        }
+    }
+
     async fn process_twitch_message(&mut self, message: ServerMessage) {
         match message {
             ServerMessage::Privmsg(msg) => {
@@ -298,6 +311,9 @@ impl ChatLoop {
                         }
                         ChatAction::CountBits => {
                             self.count_bits(&msg).await;
+                        }
+                        ChatAction::Queue => {
+                            self.handle_queue(&msg).await;
                         }
                         _ => {}
                     }
