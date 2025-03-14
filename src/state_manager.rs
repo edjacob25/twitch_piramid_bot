@@ -274,7 +274,11 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
                 let _ = resp.send(false);
             }
         },
-        ConfirmUser { .. } => {}
+        ConfirmUser { channel, user } => {
+            if let Err(e) = confirm_user(&channel, &user) {
+                error!("Could not confirm user(s) {user} {}: {}", channel, e);
+            }
+        }
         RemoveFromQueue { .. } => {}
         MoveToOtherTeam { .. } => {}
         ShowQueue { channel, resp } => match get_queue(&channel) {
@@ -378,6 +382,33 @@ fn add_to_queue(channel: &str, user: String, second_user: Option<String>, prefer
         };
     } else {
         bail!("Could not join any team");
+    }
+    Ok(())
+}
+
+fn confirm_user(channel: &str, user: &str) -> Result<()> {
+    let mut queue = get_queue(channel)?;
+    let mut found = false;
+    for team in queue.teams.iter_mut() {
+        for member in team.members.iter_mut() {
+            if member.name == user && member.status == Unconfirmed {
+                member.status = Confirmed;
+                found = true;
+                break;
+            }
+        }
+    }
+    if !found {
+        bail!("Could not confirm user {user} for channel {channel}");
+    } else {
+        let conn = Connection::open(DB_NAME)?;
+        let json = serde_json::to_string(&queue.teams)?;
+        if let Err(e) = conn.execute(
+            "UPDATE queue SET teams = json(?2) WHERE channel = ?1",
+            params![channel, json],
+        ) {
+            bail!("Db error when confirming user to channel {}: {}", channel, e);
+        };
     }
     Ok(())
 }
