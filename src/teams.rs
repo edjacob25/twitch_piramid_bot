@@ -4,19 +4,19 @@ use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Status {
     Confirmed,
     Unconfirmed,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Member {
     pub name: String,
     pub status: Status,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Team {
     pub members: Vec<Member>,
 }
@@ -30,6 +30,11 @@ pub struct Queue {
 
 impl Display for Team {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.members.len() == 0 {
+            write!(f, "Equipo vacio")?;
+            return Ok(());
+        }
+
         write!(f, "Equipo con ")?;
         for (count, member) in self.members.iter().enumerate() {
             if count != 0 {
