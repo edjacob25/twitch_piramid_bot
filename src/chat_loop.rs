@@ -278,7 +278,7 @@ impl ChatLoop {
             s if s.starts_with("!crear") => self.create_queue(&user, &channel, s).await,
             s if s.starts_with("!entrar") => self.join_queue(user, &channel, s).await,
             "!salir" => {}
-            "!confirmar" => {}
+            "!confirmar" => self.confirm_user(&channel, user).await,
             "!equipos" => self.show_queue(&channel).await,
             _ => {}
         }
@@ -374,6 +374,14 @@ impl ChatLoop {
             self.say_rate_limited(channel, "No se pueden mostrar equipos por el momento".to_string())
                 .await;
         }
+    }
+
+    async fn confirm_user(&self, channel: &str, user: String) {
+        let cmd = Command::ConfirmUser {
+            channel: channel.to_string(),
+            user,
+        };
+        let _ = self.sender.send(cmd).await;
     }
 
     async fn process_twitch_message(&mut self, message: ServerMessage) {
