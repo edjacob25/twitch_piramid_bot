@@ -279,7 +279,11 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
                 error!("Could not confirm user(s) {user} {}: {}", channel, e);
             }
         }
-        RemoveFromQueue { .. } => {}
+        RemoveFromQueue { channel, user } => {
+            if let Err(e) = delete_from_queue(&channel, &user) {
+                error!("Could not delete user(s) {user} {}: {}", channel, e);
+            }
+        }
         MoveToOtherTeam { .. } => {}
         ShowQueue { channel, resp } => match get_queue(&channel) {
             Ok(res) => {
@@ -408,6 +412,34 @@ fn confirm_user(channel: &str, user: &str) -> Result<()> {
             params![channel, json],
         ) {
             bail!("Db error when confirming user to channel {}: {}", channel, e);
+        };
+    }
+    Ok(())
+}
+
+fn delete_from_queue(channel: &str, user: &str) -> Result<()> {
+    let mut queue = get_queue(channel)?;
+    let mut found = false;
+    for team in queue.teams.iter_mut() {
+        for (idx, member) in team.members.iter().enumerate() {
+            if member.name == user {
+                team.members.remove(idx);
+                found = true;
+                break;
+            }
+        }
+    }
+
+    if !found {
+        bail!("Could not delete user {user} for channel {channel}");
+    } else {
+        let conn = Connection::open(DB_NAME)?;
+        let json = serde_json::to_string(&queue.teams)?;
+        if let Err(e) = conn.execute(
+            "UPDATE queue SET teams = json(?2) WHERE channel = ?1",
+            params![channel, json],
+        ) {
+            bail!("Db error when deleting user to channel {}: {}", channel, e);
         };
     }
     Ok(())
