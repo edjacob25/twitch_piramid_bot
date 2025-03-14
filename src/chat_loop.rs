@@ -277,7 +277,8 @@ impl ChatLoop {
         match msg.message_text.as_str().trim() {
             s if s.starts_with("!crear") => self.create_queue(&user, &channel, s).await,
             s if s.starts_with("!entrar") => self.join_queue(user, &channel, s).await,
-            "!salir" => {}
+            s if s.starts_with("!borrar") => self.admin_remove(&channel, &user, s).await,
+            "!salir" => self.delete_user(&channel, user).await,
             "!confirmar" => self.confirm_user(&channel, user).await,
             "!equipos" => self.show_queue(&channel).await,
             _ => {}
@@ -382,6 +383,39 @@ impl ChatLoop {
             user,
         };
         let _ = self.sender.send(cmd).await;
+    }
+
+    fn parse_remove_opts(msg: &str) -> Option<String> {
+        let split = msg.trim().split(' ').collect::<Vec<_>>();
+        let len = split.len();
+        if len > 1 {
+            return Some(split[1].to_string());
+        }
+        return None;
+    }
+
+    async fn admin_remove(&self, channel: &str, login: &str, msg: &str) {
+        if channel != login {
+            self.say_rate_limited(channel, "Tu no puedes borrar a alguien mas".to_string())
+                .await;
+            return;
+        }
+        if let Some(target) = Self::parse_remove_opts(msg) {
+            self.delete_user(channel, target).await;
+        } else {
+            self.say_rate_limited(channel, "No hay a quien borrar".to_string())
+                .await;
+        }
+    }
+
+    async fn delete_user(&self, channel: &str, user: String) {
+        let cmd = Command::RemoveFromQueue {
+            channel: channel.to_string(),
+            user: user.clone(),
+        };
+        let _ = self.sender.send(cmd).await;
+        self.say_rate_limited(channel, format!("{user} ha sido borrado de la cola"))
+            .await;
     }
 
     async fn process_twitch_message(&mut self, message: ServerMessage) {
