@@ -128,6 +128,7 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
     let mut predictions: HashMap<String, StreamPrediction> = HashMap::new();
     use Command::*;
     match cmd {
+        // ChannelStatus
         GetChannelStatus { key, resp } => {
             let conn = Connection::open(DB_NAME).expect("Could not open db");
             let res = conn
@@ -143,6 +144,7 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
                 error!("Could not update channel status: {e}");
             }
         }
+        // AutoSo
         GetSoStatus {
             channel,
             so_channel,
@@ -178,6 +180,7 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
                 error!("Could not reset autoso status on channel {channel}: {e}");
             }
         }
+        // Predictions
         StartPrediction { channel, question } => {
             predictions.insert(
                 channel,
@@ -208,6 +211,7 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
                 }
             }
         }
+        // Stream info
         GetStreamInfo { channel, resp } => {
             let current = streams_data.entry(channel.clone()).or_insert(Event {
                 id: None,
@@ -227,12 +231,14 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
         SetStreamInfo { channel, event } => {
             streams_data.insert(channel, *event);
         }
+        // Buts
         CountBits { channel, user, bits } => {
             let res = save_bits(channel.as_str(), user.as_str(), bits);
             if let Err(e) = res {
                 error!("Could not save bits {:?}", e);
             }
         }
+        // Pyramids
         IncrementPyramid { channel, user, resp } => {
             let res = increment_pyramid_count(channel, user).unwrap_or_else(|e| {
                 error!("Error when incrementing the pyramid: {e}");
@@ -240,6 +246,7 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
             });
             let _ = resp.send(res);
         }
+        // Queues
         CreateQueue {
             channel,
             teams,
@@ -270,19 +277,16 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
         ConfirmUser { .. } => {}
         RemoveFromQueue { .. } => {}
         MoveToOtherTeam { .. } => {}
-        ShowQueue { channel, resp } => {
-            match  get_queue(&channel){
-                Ok(res) => {
-                    debug!("Queue from db {:?}", res);
-                    let _ = resp.send(res);
-                }
-                Err(err) => {
-                    error!("Could not get queue from db {:?}", err);
-                    let _ = resp.send(Queue::default());
-                }
+        ShowQueue { channel, resp } => match get_queue(&channel) {
+            Ok(res) => {
+                debug!("Queue from db {:?}", res);
+                let _ = resp.send(res);
             }
-        }
-
+            Err(err) => {
+                error!("Could not get queue from db {:?}", err);
+                let _ = resp.send(Queue::default());
+            }
+        },
     }
 }
 
