@@ -291,7 +291,7 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
 }
 
 fn create_queue(channel: &str, teams: u8, per_team: u8) -> Result<()> {
-    let conn = Connection::open(DB_NAME).expect("Could not open db");
+    let conn = Connection::open(DB_NAME)?;
     let teams_vec = (0..teams).into_iter().map(|_| Team::default()).collect::<Vec<_>>();
     let json = serde_json::to_string(&teams_vec)?;
     if let Err(e) = conn.execute(
@@ -304,7 +304,7 @@ fn create_queue(channel: &str, teams: u8, per_team: u8) -> Result<()> {
 }
 
 fn get_queue(channel: &str) -> Result<Queue> {
-    let conn = Connection::open(DB_NAME).expect("Could not open db");
+    let conn = Connection::open(DB_NAME)?;
     conn.query_row_and_then(
         "SELECT no_teams, team_size, teams FROM queue WHERE channel = ?1",
         [channel],
@@ -369,15 +369,14 @@ fn add_to_queue(channel: &str, user: String, second_user: Option<String>, prefer
             });
         }
         let json = serde_json::to_string(&queue.teams)?;
-        let conn = Connection::open(DB_NAME).expect("Could not open db");
+        let conn = Connection::open(DB_NAME)?;
         if let Err(e) = conn.execute(
             "UPDATE queue SET teams = json(?2) WHERE channel = ?1",
             params![channel, json],
         ) {
-            error!("Could not reset queue on channel {}: {}", channel, e);
+            bail!("Db error when adding user to channel {}: {}", channel, e);
         };
     } else {
-        println!("COuld not join any team");
         bail!("Could not join any team");
     }
     Ok(())
