@@ -245,23 +245,13 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
             teams,
             per_team,
         } => {
-            let conn = Connection::open(DB_NAME).expect("Could not open db");
-            let teams_vec = (0..teams).into_iter().map(|_| Team::default()).collect::<Vec<_>>();
-            let teams_str = serde_json::to_string(&teams_vec).unwrap();
-            if let Err(e) = conn.execute(
-                "INSERT INTO queue VALUES (?1, ?2, ?3, $4) ON CONFLICT(channel) DO UPDATE SET no_teams=?2, team_size=?3, teams=$4",
-                params![channel, teams, per_team, teams_str],
-            ) {
-                error!("Could not reset queue on channel {}: {}", channel, e);
+            if let Err(e) = create_queue(&channel, teams, per_team) {
+                error!("Could not create queue for channel {channel}: {e}");
             };
         }
         ResetQueue { channel } => {
-            let conn = Connection::open(DB_NAME).expect("Could not open db");
-            if let Err(e) = conn.execute(
-                "INSERT INTO queue VALUES (?1, 0, 0, json_array()) ON CONFLICT(channel) DO UPDATE SET no_teams=0, team_size=0, teams=json_array()",
-                params![channel],
-            ) {
-                error!("Could not reset queue on channel {}: {}", channel, e);
+            if let Err(e) = create_queue(&channel, 0, 0) {
+                error!("Could not reset queue for channel {channel}: {e}");
             };
         }
         AddToQueue {
@@ -294,6 +284,19 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
         }
 
     }
+}
+
+fn create_queue(channel: &str, teams: u8, per_team: u8) -> Result<()> {
+    let conn = Connection::open(DB_NAME).expect("Could not open db");
+    let teams_vec = (0..teams).into_iter().map(|_| Team::default()).collect::<Vec<_>>();
+    let json = serde_json::to_string(&teams_vec)?;
+    if let Err(e) = conn.execute(
+        "INSERT INTO queue VALUES (?1, ?2, ?3, $4) ON CONFLICT(channel) DO UPDATE SET no_teams=?2, team_size=?3, teams=$4",
+        params![channel, teams, per_team, json],
+    ) {
+        bail!("Db error when creating queue: {}", e);
+    };
+    Ok(())
 }
 
 fn get_queue(channel: &str) -> Result<Queue> {
