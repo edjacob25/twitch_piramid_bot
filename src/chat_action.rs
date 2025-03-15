@@ -9,6 +9,7 @@ pub enum ChatAction {
     GiveSO,
     AutoSO,
     CountBits,
+    Queue,
 }
 
 impl FromStr for ChatAction {
@@ -22,6 +23,7 @@ impl FromStr for ChatAction {
             "GiveSO" => Ok(ChatAction::GiveSO),
             "AutoSO" => Ok(ChatAction::AutoSO),
             "CountBits" => Ok(ChatAction::CountBits),
+            "Queue" => Ok(ChatAction::Queue),
             _ => Err(()),
         }
     }
