@@ -17,6 +17,7 @@ use twitch_piramid_bot::bot_token_storage::CustomTokenStorage;
 use twitch_piramid_bot::chat_loop::message_loop;
 use twitch_piramid_bot::event_loop::create_event_loop;
 use twitch_piramid_bot::state_manager::create_state_manager;
+use twitch_piramid_bot::web::create_webserver;
 
 #[tokio::main]
 pub async fn main() {
@@ -74,6 +75,7 @@ pub async fn main() {
     let conf = Arc::new(conf);
     let _state_manager = create_state_manager(conf.clone(), rx);
     let _event_loop = create_event_loop(conf.clone(), tx.clone(), credentials);
+    let _web = create_webserver().await;
     let message_loop = message_loop(conf, incoming_messages, client.clone(), tx.clone());
 
     // keep the tokio executor alive.

@@ -7,4 +7,5 @@ pub mod event_loop;
 pub mod pyramid_action;
 pub mod state_manager;
 mod teams;
+pub mod web;
 pub mod twitch_ws;
