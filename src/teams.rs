@@ -12,6 +12,13 @@ pub enum AddResult {
     GeneralError,
 }
 
+#[derive(Debug)]
+pub enum ConfirmResult {
+    Success(usize),
+    NotFound,
+    GeneralError,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Status {
     Confirmed,

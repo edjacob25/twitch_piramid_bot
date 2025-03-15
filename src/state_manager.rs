@@ -1,7 +1,7 @@
 use crate::bot_config::BotConfig;
 use crate::bot_token_storage::CustomTokenStorage;
 use crate::teams::Status::{Confirmed, Unconfirmed};
-use crate::teams::{AddResult, Member, Queue, Team};
+use crate::teams::{AddResult, ConfirmResult, Member, Queue, Team};
 use crate::twitch_ws::Event;
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Local, Utc};
@@ -91,6 +91,7 @@ pub enum Command {
     ConfirmUser {
         channel: String,
         user: String,
+        resp: Responder<ConfirmResult>,
     },
     RemoveFromQueue {
         channel: String,
@@ -275,11 +276,15 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
                 let _ = resp.send(AddResult::GeneralError);
             }
         },
-        ConfirmUser { channel, user } => {
-            if let Err(e) = confirm_user(&channel, &user) {
-                error!("Could not confirm user {user} {channel}: {e}");
+        ConfirmUser { channel, user, resp } => match confirm_user(&channel, &user) {
+            Ok(r) => {
+                let _ = resp.send(r);
             }
-        }
+            Err(e) => {
+                error!("Could not confirm user {user} {channel}: {e}");
+                let _ = resp.send(ConfirmResult::GeneralError);
+            }
+        },
         RemoveFromQueue { channel, user } => {
             if let Err(e) = delete_from_queue(&channel, &user) {
                 error!("Could not delete user {user} {channel}: {e}");
@@ -408,9 +413,10 @@ fn add_to_queue(channel: &str, user: String, second_user: Option<String>, pref_t
     }
 }
 
-fn confirm_user(channel: &str, user: &str) -> Result<()> {
+fn confirm_user(channel: &str, user: &str) -> Result<ConfirmResult> {
     let mut queue = get_queue(channel)?;
     let mut found = false;
+    let mut idx = 0;
     for team in queue.teams.iter_mut() {
         for member in team.members.iter_mut() {
             if member.name == user && member.status == Unconfirmed {
@@ -419,13 +425,14 @@ fn confirm_user(channel: &str, user: &str) -> Result<()> {
                 break;
             }
         }
+        idx += 1;
     }
     if !found {
-        bail!("Could not confirm user {user} for channel {channel}");
+        Ok(ConfirmResult::NotFound)
     } else {
         update_queue(channel, queue, "confirming")?;
+        Ok(ConfirmResult::Success(idx))
     }
-    Ok(())
 }
 
 fn move_to_other_team(channel: &str, user: &str, desired_team: u8) -> Result<()> {

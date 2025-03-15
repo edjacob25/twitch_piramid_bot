@@ -401,11 +401,25 @@ impl ChatLoop {
     }
 
     async fn confirm_user(&self, channel: &str, user: String) {
+        let (tx, rx) = oneshot::channel();
         let cmd = Command::ConfirmUser {
             channel: channel.to_string(),
-            user,
+            user: user.clone(),
+            resp: tx,
         };
         let _ = self.sender.send(cmd).await;
+        use crate::teams::ConfirmResult::*;
+        match rx.await.unwrap_or(GeneralError) {
+            Success(i) => {
+                self.say_rate_limited(channel, format!("{user} confirmado en equipo {}", i + 1))
+                    .await
+            }
+            NotFound => {
+                self.say_rate_limited(channel, format!("{user} no encontrado para confirmar"))
+                    .await
+            }
+            GeneralError => self.say_rate_limited(channel, "No se pudo confirmar".to_string()).await,
+        }
     }
 
     fn parse_remove_opts(msg: &str) -> Option<String> {
