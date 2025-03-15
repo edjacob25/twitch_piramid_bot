@@ -4,4 +4,5 @@ data/
 *.sqlite
 target/
 *.db/
+node_modules/
 *.example

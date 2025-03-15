@@ -8,7 +8,9 @@ default-run = "twitch_piramid_bot"
 
 [dependencies]
 anyhow = "1.0"
+askama = "0.12"
 async-trait = "0.1"
+axum = "0.8"
 chrono = { version = "0.4", features = ["serde"] }
 config = { version = "0.15", features = ["toml"] }
 file-rotate = "0.8"

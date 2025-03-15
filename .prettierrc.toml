@@ -1,0 +1,6 @@
+tabWidth = 4
+plugins = ["prettier-plugin-jinja-template"]
+
+[[overrides]]
+    files= "*.{askama,html}"
+    options.parser = "jinja-template"
