@@ -342,6 +342,14 @@ impl ChatLoop {
 
     async fn join_queue(&self, user: String, channel: &str, msg: &str) {
         let (extra, team) = Self::parse_join_opts(msg);
+        if let Some(t) = team {
+            if t == 0 {
+                self.say_rate_limited(channel, "No se pudo anotar para el equipo 0".to_string())
+                    .await;
+                return;
+            }
+        }
+        let team = team.map(|team| team - 1);
         let (tx, rx) = oneshot::channel();
         let cmd = Command::AddToQueue {
             channel: channel.to_string(),
@@ -353,7 +361,7 @@ impl ChatLoop {
         let _ = self.sender.send(cmd).await;
         let success = rx.await.unwrap_or(false);
         if !success {
-            self.say_rate_limited(channel, "No se pudo antoar para el equipo x".to_string())
+            self.say_rate_limited(channel, "No se pudo anotar para el equipo x".to_string())
                 .await;
             return;
         }
@@ -392,7 +400,7 @@ impl ChatLoop {
         if len > 1 {
             return Some(split[1].to_string());
         }
-        return None;
+        None
     }
 
     async fn admin_remove(&self, channel: &str, login: &str, msg: &str) {

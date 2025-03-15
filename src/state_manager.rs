@@ -376,8 +376,8 @@ fn add_to_queue(channel: &str, user: String, second_user: Option<String>, prefer
 
     let mut chosen_idx = None;
     if let Some(preferred_team) = preferred_team {
-        let real_idx = (preferred_team - 1) as usize;
-        if free_spaces[real_idx] >= users {
+        let real_idx = preferred_team as usize;
+        if real_idx < free_spaces.len() && free_spaces[real_idx] >= users  {
             chosen_idx = Some(real_idx);
         }
     }
