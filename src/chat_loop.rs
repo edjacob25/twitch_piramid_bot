@@ -278,6 +278,7 @@ impl ChatLoop {
             s if s.starts_with("!crear") => self.create_queue(&user, &channel, s).await,
             s if s.starts_with("!entrar") => self.join_queue(user, &channel, s).await,
             s if s.starts_with("!borrar") => self.admin_remove(&channel, &user, s).await,
+            s if s.starts_with("!mover") => self.move_user(&channel, user, s).await,
             "!salir" => self.delete_user(&channel, user).await,
             "!confirmar" => self.confirm_user(&channel, user).await,
             "!equipos" => self.show_queue(&channel).await,
@@ -415,6 +416,51 @@ impl ChatLoop {
         };
         let _ = self.sender.send(cmd).await;
         self.say_rate_limited(channel, format!("{user} ha sido borrado de la cola"))
+            .await;
+    }
+
+    fn parse_move_opts(msg: &str) -> Result<(u8, Option<String>)> {
+        let split = msg.trim().split(' ').collect::<Vec<_>>();
+        let len = split.len();
+        if len == 1 {
+            bail!("No team selected");
+        }
+        if len == 2 {
+            return Ok((split[1].parse::<u8>()?, None));
+        }
+
+        let preferred_team = split[2].parse::<u8>()?;
+        Ok((preferred_team, Some(split[1].to_string())))
+    }
+
+    async fn move_user(&self, channel: &str, user: String, msg: &str) {
+        let (team, target) = match Self::parse_move_opts(msg) {
+            Ok(res) => (res.0, res.1.unwrap_or(user)),
+            Err(_) => {
+                self.say_rate_limited(channel, "Hubo un error con las opciones del comando".to_string())
+                    .await;
+                return;
+            }
+        };
+        if team == 0 {
+            self.say_rate_limited(channel, "No se pudo mover para el equipo 0".to_string())
+                .await;
+            return;
+        }
+        let (tx, rx) = oneshot::channel();
+        let cmd = Command::MoveToOtherTeam {
+            channel: channel.to_string(),
+            user: target.clone(),
+            team: team - 1,
+            resp: tx,
+        };
+        let _ = self.sender.send(cmd).await;
+
+        if !rx.await.unwrap_or(false) {
+            self.say_rate_limited(channel, format!("No se pudo mover{target} al equipo {team}"))
+                .await;
+        }
+        self.say_rate_limited(channel, format!("{target} ha sido movido al equipo {team}"))
             .await;
     }
 

@@ -100,6 +100,7 @@ pub enum Command {
         channel: String,
         user: String,
         team: u8,
+        resp: Responder<bool>,
     },
     ShowQueue {
         channel: String,
@@ -270,21 +271,33 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
         } => match add_to_queue(&channel, user.clone(), second_user, team) {
             Ok(_) => resp.send(true).unwrap_or_default(),
             Err(e) => {
-                error!("Could not add user(s) {user} {}: {}", channel, e);
+                error!("Could not add user(s) {user} {channel}: {e}");
                 let _ = resp.send(false);
             }
         },
         ConfirmUser { channel, user } => {
             if let Err(e) = confirm_user(&channel, &user) {
-                error!("Could not confirm user(s) {user} {}: {}", channel, e);
+                error!("Could not confirm user {user} {channel}: {e}");
             }
         }
         RemoveFromQueue { channel, user } => {
             if let Err(e) = delete_from_queue(&channel, &user) {
-                error!("Could not delete user(s) {user} {}: {}", channel, e);
+                error!("Could not delete user {user} {channel}: {e}");
             }
         }
-        MoveToOtherTeam { .. } => {}
+        MoveToOtherTeam {
+            channel,
+            user,
+            team,
+            resp,
+        } => {
+            if let Err(e) = move_to_other_team(&channel, &user, team) {
+                error!("Could not move user {user} {channel}: {e}");
+                let _ = resp.send(false);
+                return;
+            }
+            let _ = resp.send(true);
+        }
         ShowQueue { channel, resp } => match get_queue(&channel) {
             Ok(res) => {
                 debug!("Queue from db {:?}", res);
@@ -412,6 +425,40 @@ fn confirm_user(channel: &str, user: &str) -> Result<()> {
     } else {
         update_queue(channel, queue, "confirming")?;
     }
+    Ok(())
+}
+
+fn move_to_other_team(channel: &str, user: &str, desired_team: u8) -> Result<()> {
+    let mut queue = get_queue(channel)?;
+    if desired_team as usize >= queue.teams.len() {
+        bail!("Desired team oob");
+    }
+    let available_space = queue.teams[desired_team as usize].members.len() < queue.team_size as usize;
+    if !available_space {
+        bail!("No space available for team {desired_team}");
+    }
+    let mut final_idx = None;
+    for (t_idx, team) in queue.teams.iter().enumerate() {
+        for (idx, member) in team.members.iter().enumerate() {
+            if member.name == user {
+                final_idx = Some((t_idx, idx));
+                break;
+            }
+        }
+    }
+
+    if let Some(final_idx) = final_idx {
+        if final_idx.0 == desired_team as usize {
+            bail!("Same team, no need to change")
+        }
+        let p = queue.teams[final_idx.0].members.remove(final_idx.1);
+        queue.teams[desired_team as usize].members.push(p);
+
+        update_queue(channel, queue, "moving")?;
+    } else {
+        bail!("Not in any team");
+    }
+
     Ok(())
 }
 
