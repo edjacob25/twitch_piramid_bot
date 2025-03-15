@@ -274,6 +274,7 @@ impl ChatLoop {
     async fn handle_queue(&mut self, msg: &ChatMessage) {
         let channel = &msg.channel_login;
         let user = msg.sender.login.clone();
+        let _admin = self.check_admin(&msg);
         match msg.message_text.as_str().trim() {
             s if s.starts_with("!crear") => self.create_queue(&user, &channel, s).await,
             s if s.starts_with("!entrar") => self.join_queue(user, &channel, s).await,
@@ -286,6 +287,10 @@ impl ChatLoop {
         }
     }
 
+    fn check_admin(&self, msg: &ChatMessage) -> bool {
+        let badges = msg.badges.iter().map(|b| b.name.to_lowercase()).collect::<Vec<_>>();
+        badges.iter().any(|x| x.eq("broadcaster") || x.eq("moderator"))
+    }
     fn parse_create_opts(msg: &str) -> Result<(u8, u8)> {
         let split = msg.trim().split(' ').collect::<Vec<_>>();
         if split.len() < 3 {
