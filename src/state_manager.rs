@@ -1,7 +1,7 @@
 use crate::bot_config::BotConfig;
 use crate::bot_token_storage::CustomTokenStorage;
 use crate::teams::Status::{Confirmed, Unconfirmed};
-use crate::teams::{AddResult, ConfirmResult, Member, Queue, Team};
+use crate::teams::{AddResult, ConfirmResult, DeletionResult, Member, MoveResult, Queue, Team};
 use crate::twitch_ws::Event;
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Local, Utc};
@@ -101,7 +101,7 @@ pub enum Command {
         channel: String,
         user: String,
         team: u8,
-        resp: Responder<bool>,
+        resp: Responder<MoveResult>,
     },
     ShowQueue {
         channel: String,
@@ -295,14 +295,13 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
             user,
             team,
             resp,
-        } => {
-            if let Err(e) = move_to_other_team(&channel, &user, team) {
+        } => match move_to_other_team(&channel, &user, team) {
+            Ok(res) => resp.send(res).unwrap_or_default(),
+            Err(e) => {
                 error!("Could not move user {user} {channel}: {e}");
-                let _ = resp.send(false);
-                return;
+                let _ = resp.send(MoveResult::GeneralError);
             }
-            let _ = resp.send(true);
-        }
+        },
         ShowQueue { channel, resp } => match get_queue(&channel) {
             Ok(res) => {
                 debug!("Queue from db {:?}", res);
@@ -435,14 +434,14 @@ fn confirm_user(channel: &str, user: &str) -> Result<ConfirmResult> {
     }
 }
 
-fn move_to_other_team(channel: &str, user: &str, desired_team: u8) -> Result<()> {
+fn move_to_other_team(channel: &str, user: &str, desired_team: u8) -> Result<MoveResult> {
     let mut queue = get_queue(channel)?;
     if desired_team as usize >= queue.teams.len() {
-        bail!("Desired team oob");
+        return Ok(MoveResult::InvalidTeam);
     }
     let available_space = queue.teams[desired_team as usize].members.len() < queue.team_size as usize;
     if !available_space {
-        bail!("No space available for team {desired_team}");
+        return Ok(MoveResult::NoSpace);
     }
     let mut final_idx = None;
     for (t_idx, team) in queue.teams.iter().enumerate() {
@@ -462,11 +461,10 @@ fn move_to_other_team(channel: &str, user: &str, desired_team: u8) -> Result<()>
         queue.teams[desired_team as usize].members.push(p);
 
         update_queue(channel, queue, "moving")?;
+        Ok(MoveResult::Success)
     } else {
-        bail!("Not in any team");
+        Ok(MoveResult::NotFound)
     }
-
-    Ok(())
 }
 
 fn delete_from_queue(channel: &str, user: &str) -> Result<()> {

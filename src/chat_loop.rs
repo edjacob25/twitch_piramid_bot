@@ -496,13 +496,32 @@ impl ChatLoop {
             resp: tx,
         };
         let _ = self.sender.send(cmd).await;
-
-        if !rx.await.unwrap_or(false) {
-            self.say_rate_limited(channel, format!("No se pudo mover{target} al equipo {team}"))
-                .await;
+        use crate::teams::MoveResult::*;
+        match rx.await.unwrap_or(GeneralError) {
+            Success => {
+                self.say_rate_limited(channel, format!("{target} ha sido movido al equipo {team}"))
+                    .await;
+            }
+            NotFound => {
+                self.say_rate_limited(channel, format!("{target} no esta en ningun equipo"))
+                    .await;
+            }
+            NoSpace => {
+                self.say_rate_limited(channel, "No hay espacio en el equipo deseado".to_string())
+                    .await;
+            }
+            InvalidTeam => {
+                self.say_rate_limited(channel, "No existe ese equipo".to_string()).await;
+            }
+            AlreadyInTeam => {
+                self.say_rate_limited(channel, format!("{target} ya esta en al equipo {team}"))
+                    .await;
+            }
+            GeneralError => {
+                self.say_rate_limited(channel, format!("No se pudo mover{target} al equipo {team}"))
+                    .await;
+            }
         }
-        self.say_rate_limited(channel, format!("{target} ha sido movido al equipo {team}"))
-            .await;
     }
 
     async fn process_twitch_message(&mut self, message: ServerMessage) {

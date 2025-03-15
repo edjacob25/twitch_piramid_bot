@@ -19,6 +19,23 @@ pub enum ConfirmResult {
     GeneralError,
 }
 
+#[derive(Debug)]
+pub enum MoveResult {
+    Success,
+    NotFound,
+    NoSpace,
+    InvalidTeam,
+    AlreadyInTeam,
+    GeneralError,
+}
+
+#[derive(Debug)]
+pub enum DeletionResult {
+    Success,
+    NotFound,
+    GeneralError,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Status {
     Confirmed,
