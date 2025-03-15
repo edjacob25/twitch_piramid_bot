@@ -328,6 +328,18 @@ fn get_queue(channel: &str) -> Result<Queue> {
     )
 }
 
+fn update_queue(channel: &str, queue: Queue, operation: &str) -> Result<()> {
+    let conn = Connection::open(DB_NAME)?;
+    let json = serde_json::to_string(&queue.teams)?;
+    if let Err(e) = conn.execute(
+        "UPDATE queue SET teams = json(?2) WHERE channel = ?1",
+        params![channel, json],
+    ) {
+        bail!("Db error when {operation} user to channel {channel}: {e}");
+    };
+    Ok(())
+}
+
 fn add_to_queue(channel: &str, user: String, second_user: Option<String>, preferred_team: Option<u8>) -> Result<()> {
     let mut queue = get_queue(channel)?;
     let mut users = 2u8;
@@ -376,14 +388,7 @@ fn add_to_queue(channel: &str, user: String, second_user: Option<String>, prefer
                 status: Unconfirmed,
             });
         }
-        let json = serde_json::to_string(&queue.teams)?;
-        let conn = Connection::open(DB_NAME)?;
-        if let Err(e) = conn.execute(
-            "UPDATE queue SET teams = json(?2) WHERE channel = ?1",
-            params![channel, json],
-        ) {
-            bail!("Db error when adding user to channel {}: {}", channel, e);
-        };
+        update_queue(channel, queue, "Adding")?;
     } else {
         bail!("Could not join any team");
     }
@@ -405,14 +410,7 @@ fn confirm_user(channel: &str, user: &str) -> Result<()> {
     if !found {
         bail!("Could not confirm user {user} for channel {channel}");
     } else {
-        let conn = Connection::open(DB_NAME)?;
-        let json = serde_json::to_string(&queue.teams)?;
-        if let Err(e) = conn.execute(
-            "UPDATE queue SET teams = json(?2) WHERE channel = ?1",
-            params![channel, json],
-        ) {
-            bail!("Db error when confirming user to channel {}: {}", channel, e);
-        };
+        update_queue(channel, queue, "confirming")?;
     }
     Ok(())
 }
@@ -433,14 +431,7 @@ fn delete_from_queue(channel: &str, user: &str) -> Result<()> {
     if !found {
         bail!("Could not delete user {user} for channel {channel}");
     } else {
-        let conn = Connection::open(DB_NAME)?;
-        let json = serde_json::to_string(&queue.teams)?;
-        if let Err(e) = conn.execute(
-            "UPDATE queue SET teams = json(?2) WHERE channel = ?1",
-            params![channel, json],
-        ) {
-            bail!("Db error when deleting user to channel {}: {}", channel, e);
-        };
+        update_queue(channel, queue, "deleting")?;
     }
     Ok(())
 }
