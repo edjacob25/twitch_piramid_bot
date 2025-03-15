@@ -67,7 +67,6 @@ impl Display for Team {
             return Ok(());
         }
 
-        write!(f, "Equipo con ")?;
         for (count, member) in self.members.iter().enumerate() {
             if count != 0 {
                 write!(f, ", ")?;
@@ -84,7 +83,7 @@ impl Display for Team {
 
 impl Display for Queue {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "| ")?;
+        write!(f, "{} por equipo: | ", self.team_size)?;
         for team in &self.teams {
             write!(f, "{} | ", team)?;
         }

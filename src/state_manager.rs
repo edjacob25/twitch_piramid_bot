@@ -458,7 +458,7 @@ fn move_to_other_team(channel: &str, user: &str, desired_team: u8) -> Result<Mov
 
     if let Some(final_idx) = final_idx {
         if final_idx.0 == desired_team as usize {
-            bail!("Same team, no need to change")
+            return Ok(MoveResult::AlreadyInTeam);
         }
         let p = queue.teams[final_idx.0].members.remove(final_idx.1);
         queue.teams[desired_team as usize].members.push(p);

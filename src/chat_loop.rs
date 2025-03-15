@@ -465,7 +465,7 @@ impl ChatLoop {
                     .await;
             }
             NotFound => {
-                self.say_rate_limited(channel, format!("{user} no estaba en la cola"))
+                self.say_rate_limited(channel, format!("{user} no esta en la cola"))
                     .await;
             }
             GeneralError => {
@@ -533,7 +533,7 @@ impl ChatLoop {
                     .await;
             }
             GeneralError => {
-                self.say_rate_limited(channel, format!("No se pudo mover{target} al equipo {team}"))
+                self.say_rate_limited(channel, format!("No se pudo mover {target} al equipo {team}"))
                     .await;
             }
         }
