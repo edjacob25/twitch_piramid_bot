@@ -4,6 +4,14 @@ use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
+#[derive(Debug)]
+pub enum AddResult {
+    Success(usize),
+    AlreadyInQueue,
+    NoSpace,
+    GeneralError,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Status {
     Confirmed,

@@ -1,7 +1,7 @@
 use crate::bot_config::BotConfig;
 use crate::bot_token_storage::CustomTokenStorage;
 use crate::teams::Status::{Confirmed, Unconfirmed};
-use crate::teams::{Member, Queue, Team};
+use crate::teams::{AddResult, Member, Queue, Team};
 use crate::twitch_ws::Event;
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Local, Utc};
@@ -86,7 +86,7 @@ pub enum Command {
         user: String,
         second_user: Option<String>,
         team: Option<u8>,
-        resp: Responder<bool>,
+        resp: Responder<AddResult>,
     },
     ConfirmUser {
         channel: String,
@@ -269,10 +269,10 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
             team,
             resp,
         } => match add_to_queue(&channel, user.clone(), second_user, team) {
-            Ok(_) => resp.send(true).unwrap_or_default(),
+            Ok(res) => resp.send(res).unwrap_or_default(),
             Err(e) => {
                 error!("Could not add user(s) {user} {channel}: {e}");
-                let _ = resp.send(false);
+                let _ = resp.send(AddResult::GeneralError);
             }
         },
         ConfirmUser { channel, user } => {
@@ -353,7 +353,7 @@ fn update_queue(channel: &str, queue: Queue, operation: &str) -> Result<()> {
     Ok(())
 }
 
-fn add_to_queue(channel: &str, user: String, second_user: Option<String>, preferred_team: Option<u8>) -> Result<()> {
+fn add_to_queue(channel: &str, user: String, second_user: Option<String>, pref_team: Option<u8>) -> Result<AddResult> {
     let mut queue = get_queue(channel)?;
     let mut users = 2u8;
     let second_user = second_user.unwrap_or_else(|| {
@@ -362,22 +362,22 @@ fn add_to_queue(channel: &str, user: String, second_user: Option<String>, prefer
     });
 
     let mut free_spaces = vec![];
-    let mut found_already = false;
+    let mut already_found = false;
     for team in queue.teams.iter() {
         free_spaces.push(queue.team_size - team.members.len() as u8);
         let names = team.members.iter().map(|x| x.name.as_str()).collect::<Vec<_>>();
         if names.contains(&user.as_str()) || (users == 2 && names.contains(&second_user.as_str())) {
-            found_already = true;
+            already_found = true;
         }
     }
-    if found_already {
-        bail!("Already found in queue");
+    if already_found {
+        return Ok(AddResult::AlreadyInQueue);
     }
 
     let mut chosen_idx = None;
-    if let Some(preferred_team) = preferred_team {
+    if let Some(preferred_team) = pref_team {
         let real_idx = preferred_team as usize;
-        if real_idx < free_spaces.len() && free_spaces[real_idx] >= users  {
+        if real_idx < free_spaces.len() && free_spaces[real_idx] >= users {
             chosen_idx = Some(real_idx);
         }
     }
@@ -402,10 +402,10 @@ fn add_to_queue(channel: &str, user: String, second_user: Option<String>, prefer
             });
         }
         update_queue(channel, queue, "Adding")?;
+        Ok(AddResult::Success(chosen_idx))
     } else {
-        bail!("Could not join any team");
+        Ok(AddResult::NoSpace)
     }
-    Ok(())
 }
 
 fn confirm_user(channel: &str, user: &str) -> Result<()> {

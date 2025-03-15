@@ -353,20 +353,34 @@ impl ChatLoop {
         let (tx, rx) = oneshot::channel();
         let cmd = Command::AddToQueue {
             channel: channel.to_string(),
-            user,
-            second_user: extra,
+            user: user.clone(),
+            second_user: extra.clone(),
             team,
             resp: tx,
         };
         let _ = self.sender.send(cmd).await;
-        let success = rx.await.unwrap_or(false);
-        if !success {
-            self.say_rate_limited(channel, "No se pudo anotar para el equipo x".to_string())
-                .await;
-            return;
+        use crate::teams::AddResult::*;
+        let result = rx.await.unwrap_or(GeneralError);
+        match result {
+            Success(t) => {
+                self.say_rate_limited(channel, format!("Anotado(s) en el equipo {}", t + 1))
+                    .await
+            }
+            AlreadyInQueue => {
+                let comp = if extra.is_some() {
+                    format!("{user} or {}", extra.unwrap())
+                } else {
+                    user
+                };
+                self.say_rate_limited(channel, format!("No se pudo agregar, {comp} ya esta en algún equipo"))
+                    .await
+            }
+            NoSpace => {
+                self.say_rate_limited(channel, "No se pudo agregar, no hay lugares suficientes".to_string())
+                    .await
+            }
+            GeneralError => self.say_rate_limited(channel, "No se pudo anotar".to_string()).await,
         }
-        self.say_rate_limited(channel, "Anotado  para el equipo x".to_string())
-            .await;
     }
 
     async fn show_queue(&self, channel: &str) {
