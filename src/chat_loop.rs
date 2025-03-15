@@ -451,13 +451,28 @@ impl ChatLoop {
     }
 
     async fn delete_user(&self, channel: &str, user: String) {
+        let (tx, rx) = oneshot::channel();
         let cmd = Command::RemoveFromQueue {
             channel: channel.to_string(),
             user: user.clone(),
+            resp: tx,
         };
         let _ = self.sender.send(cmd).await;
-        self.say_rate_limited(channel, format!("{user} ha sido borrado de la cola"))
-            .await;
+        use crate::teams::DeletionResult::*;
+        match rx.await.unwrap_or(GeneralError) {
+            Success => {
+                self.say_rate_limited(channel, format!("{user} ha sido borrado de la cola"))
+                    .await;
+            }
+            NotFound => {
+                self.say_rate_limited(channel, format!("{user} no estaba en la cola"))
+                    .await;
+            }
+            GeneralError => {
+                self.say_rate_limited(channel, format!("Ha habido un error borrando {user}"))
+                    .await;
+            }
+        }
     }
 
     fn parse_move_opts(msg: &str) -> Result<(u8, Option<String>)> {

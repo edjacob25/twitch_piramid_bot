@@ -96,6 +96,7 @@ pub enum Command {
     RemoveFromQueue {
         channel: String,
         user: String,
+        resp: Responder<DeletionResult>,
     },
     MoveToOtherTeam {
         channel: String,
@@ -285,11 +286,13 @@ fn process_command(cmd: Command, streams_data: &mut HashMap<String, Event>) {
                 let _ = resp.send(ConfirmResult::GeneralError);
             }
         },
-        RemoveFromQueue { channel, user } => {
-            if let Err(e) = delete_from_queue(&channel, &user) {
+        RemoveFromQueue { channel, user, resp } => match delete_from_queue(&channel, &user) {
+            Ok(res) => resp.send(res).unwrap_or_default(),
+            Err(e) => {
                 error!("Could not delete user {user} {channel}: {e}");
+                let _ = resp.send(DeletionResult::GeneralError);
             }
-        }
+        },
         MoveToOtherTeam {
             channel,
             user,
@@ -467,7 +470,7 @@ fn move_to_other_team(channel: &str, user: &str, desired_team: u8) -> Result<Mov
     }
 }
 
-fn delete_from_queue(channel: &str, user: &str) -> Result<()> {
+fn delete_from_queue(channel: &str, user: &str) -> Result<DeletionResult> {
     let mut queue = get_queue(channel)?;
     let mut found = false;
     for team in queue.teams.iter_mut() {
@@ -481,11 +484,11 @@ fn delete_from_queue(channel: &str, user: &str) -> Result<()> {
     }
 
     if !found {
-        bail!("Could not delete user {user} for channel {channel}");
+        Ok(DeletionResult::NotFound)
     } else {
         update_queue(channel, queue, "deleting")?;
+        Ok(DeletionResult::Success)
     }
-    Ok(())
 }
 
 fn increment_pyramid_count(channel: String, user: String) -> Result<i32> {
