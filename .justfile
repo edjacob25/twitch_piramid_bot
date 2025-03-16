@@ -9,3 +9,6 @@ run_docker:
 
 pretty_html:
     npx prettier templates/* --write
+
+format: pretty_html
+    cargo fmt
