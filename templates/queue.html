@@ -1,28 +1,4 @@
-<!-- <h4>Queue de algo</h4> -->
-<form class="grid">
-    <label>
-        Numero de equipos
-        <input
-            type="number"
-            name="queue_size"
-            min="1"
-            max="5"
-            value="{{ queue.size }}"
-        />
-    </label>
-    <label>
-        Tamaño del equipo
-        <input
-            type="number"
-            name="team_size"
-            min="1"
-            max="10"
-            value="{{ queue.team_size }}"
-        />
-    </label>
-    <input type="submit" value="Cambiar tamaño" />
-</form>
-<div class="grid">
+<div id="queue" class="grid">
     {% let team_size = queue.team_size %}
     {% for (team_number,team) in queue.teams.iter().enumerate() %}
         {% include "team.html" %}

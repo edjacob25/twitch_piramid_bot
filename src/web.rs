@@ -6,9 +6,10 @@ use axum::{
     Router, extract,
     http::StatusCode,
     response::{Html, IntoResponse, Response},
-    routing::get,
+    routing::{get, post},
 };
 use log::info;
+use serde::Deserialize;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
@@ -20,6 +21,7 @@ pub async fn create_webserver(sender: Sender<Command>) -> JoinHandle<()> {
             .route("/channel/{channel}", get(queue_handler))
             .route("/channel/{channel}/queue", get(queue_fragment))
             .route("/channel/{channel}/queue/{team_num}", get(team_fragment))
+            .route("/create/queue", post(create_queue))
             .with_state(sender);
 
         // run it
@@ -46,7 +48,7 @@ async fn queue_handler(
         })
         .await;
     let queue = rx.await.unwrap_or_else(|_| Queue::default());
-    let template = MainTemplate { queue };
+    let template = MainTemplate { queue, channel };
     HtmlTemplate(template)
 }
 
@@ -85,10 +87,43 @@ async fn team_fragment(extract::Path(params): extract::Path<(String, usize)>) ->
     HtmlTemplate(template)
 }
 
+#[derive(Deserialize, Debug)]
+#[allow(dead_code)]
+struct CreateInput {
+    channel: String,
+    queue_size: u8,
+    team_size: u8,
+}
+
+async fn create_queue(
+    State(state): State<Sender<Command>>,
+    extract::Form(input): extract::Form<CreateInput>,
+) -> impl IntoResponse {
+    info!("Updating teams for {}", input.channel);
+    let _ = state
+        .send(Command::CreateQueue {
+            channel: input.channel.clone(),
+            teams: input.queue_size,
+            per_team: input.team_size,
+        })
+        .await;
+    let (tx, rx) = oneshot::channel();
+    let _ = state
+        .send(Command::ShowQueue {
+            channel: input.channel,
+            resp: tx,
+        })
+        .await;
+    let queue = rx.await.unwrap_or_else(|_| Queue::default());
+    let template = QueueTemplate { queue };
+    HtmlTemplate(template)
+}
+
 #[derive(Template)]
 #[template(path = "main.html")]
 struct MainTemplate {
     queue: Queue,
+    channel: String,
 }
 
 #[derive(Template)]

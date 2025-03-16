@@ -1,5 +1,35 @@
 {% extends "layout.html" %}
 
 {% block content %}
+    <!-- <h4>Queue de algo</h4> -->
+    <form
+        class="grid"
+        hx-post="/create/queue"
+        hx-target="#queue"
+        hx-swap="outerHTML"
+    >
+        <input type="hidden" name="channel" value="{{ channel }}" />
+        <label>
+            Numero de equipos
+            <input
+                type="number"
+                name="queue_size"
+                min="1"
+                max="5"
+                value="{{ queue.size }}"
+            />
+        </label>
+        <label>
+            Tamaño del equipo
+            <input
+                type="number"
+                name="team_size"
+                min="1"
+                max="10"
+                value="{{ queue.team_size }}"
+            />
+        </label>
+        <input type="submit" value="Cambiar tamaño" />
+    </form>
     {% include "queue.html" %}
 {% endblock %}
