@@ -1,12 +1,30 @@
-<div>
-    <h4>Team {{ team_number + 1 }}</h4>
+<article>
+    <header>Team {{ team_number + 1 }}</header>
     {% let empty_spaces = team_size - u8::try_from(team.members.len()).unwrap_or_default() %}
     <ul>
         {% for member in team.members %}
-            <li>{{ member.name }}</li>
+            <li>
+                {% if member.status == Status::Confirmed %}
+                    <ins>{{ member.name }}</ins>
+                {% else %}
+                    {{ member.name }}
+                {% endif %}
+                <i class="bi bi-x-square" style="color: red;"></i>
+                <i class="bi bi-arrow-bar-right"></i>
+            </li>
         {% endfor %}
         {% for i in 0..empty_spaces %}
             <li>Vacio</li>
         {% endfor %}
     </ul>
-</div>
+    <form>
+        <label>
+            <input type="text" placeholder="usuario" name="username" />
+        </label>
+        {% if empty_spaces == 0 %}
+            <input type="submit" value="Agregar" disabled />
+        {% else %}
+            <input type="submit" value="Agregar" />
+        {% endif %}
+    </form>
+</article>
