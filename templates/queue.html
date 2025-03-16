@@ -1,6 +1,7 @@
 <div id="queue" class="grid">
-    {% let team_size = queue.team_size %}
-    {% for (team_number,team) in queue.teams.iter().enumerate() %}
+    {% set team_size = queue.team_size %}
+    {% for team in queue.teams %}
+        {% set team_number = loop.index0 %}
         {% include "team.html" %}
     {% endfor %}
 </div>

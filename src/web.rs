@@ -1,28 +1,41 @@
 use crate::state_manager::Command;
 use crate::teams::{Member, Queue, Status, Team};
-use askama::Template;
 use axum::extract::State;
 use axum::{
     Router, extract,
     http::StatusCode,
-    response::{Html, IntoResponse, Response},
+    response::Html,
     routing::{get, post},
 };
 use log::info;
+use minijinja::{Environment, context, path_loader};
 use serde::Deserialize;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
+#[derive(Clone)]
+struct AppState {
+    engine: Environment<'static>,
+    db: Sender<Command>,
+}
 pub async fn create_webserver(sender: Sender<Command>) -> JoinHandle<()> {
     tokio::spawn(async move {
+        let mut env = Environment::new();
+        env.set_loader(path_loader("templates"));
+
+        let app_state = AppState {
+            engine: env,
+            db: sender,
+        };
+
         let app = Router::new()
             .route("/", get(main_handler))
             .route("/channel/{channel}", get(queue_handler))
             .route("/channel/{channel}/queue", get(queue_fragment))
             .route("/channel/{channel}/queue/{team_num}", get(team_fragment))
             .route("/create/queue", post(create_queue))
-            .with_state(sender);
+            .with_state(app_state);
 
         // run it
         let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await.unwrap();
@@ -37,22 +50,30 @@ async fn main_handler() -> Html<&'static str> {
 
 async fn queue_handler(
     extract::Path(channel): extract::Path<String>,
-    State(state): State<Sender<Command>>,
-) -> impl IntoResponse {
+    State(state): State<AppState>,
+) -> Result<Html<String>, StatusCode> {
     info!("Web for channel: {}", channel);
     let (tx, rx) = oneshot::channel();
     let _ = state
+        .db
         .send(Command::ShowQueue {
             channel: channel.to_string(),
             resp: tx,
         })
         .await;
     let queue = rx.await.unwrap_or_else(|_| Queue::default());
-    let template = MainTemplate { queue, channel };
-    HtmlTemplate(template)
+    let template = state
+        .engine
+        .get_template("main.html")
+        .unwrap()
+        .render(context! {queue => queue, channel => channel});
+    Ok(Html(template.unwrap()))
 }
 
-async fn queue_fragment(extract::Path(channel): extract::Path<String>) -> impl IntoResponse {
+async fn queue_fragment(
+    State(state): State<AppState>,
+    extract::Path(channel): extract::Path<String>,
+) -> Result<Html<String>, StatusCode> {
     info!("Fragment for channel: {channel}");
     let queue = Queue {
         size: 2,
@@ -67,11 +88,18 @@ async fn queue_fragment(extract::Path(channel): extract::Path<String>) -> impl I
             Team { members: vec![] },
         ],
     };
-    let template = QueueTemplate { queue };
-    HtmlTemplate(template)
+    let template = state
+        .engine
+        .get_template("queue.html")
+        .unwrap()
+        .render(context! {queue => queue});
+    Ok(Html(template.unwrap()))
 }
 
-async fn team_fragment(extract::Path(params): extract::Path<(String, usize)>) -> impl IntoResponse {
+async fn team_fragment(
+    State(state): State<AppState>,
+    extract::Path(params): extract::Path<(String, usize)>,
+) -> Result<Html<String>, StatusCode> {
     info!("Fragment for team {} in channel: {}", params.1, params.0);
     let team = Team {
         members: vec![Member {
@@ -79,12 +107,13 @@ async fn team_fragment(extract::Path(params): extract::Path<(String, usize)>) ->
             status: Status::Confirmed,
         }],
     };
-    let template = TeamTemplate {
-        team,
-        team_number: params.1,
-        team_size: 2,
-    };
-    HtmlTemplate(template)
+
+    let template = state
+        .engine
+        .get_template("team.html")
+        .unwrap()
+        .render(context! {team => team, team_number => params.1, team_size => 2});
+    Ok(Html(template.unwrap()))
 }
 
 #[derive(Deserialize, Debug)]
@@ -96,11 +125,12 @@ struct CreateInput {
 }
 
 async fn create_queue(
-    State(state): State<Sender<Command>>,
+    State(state): State<AppState>,
     extract::Form(input): extract::Form<CreateInput>,
-) -> impl IntoResponse {
+) -> Result<Html<String>, StatusCode> {
     info!("Updating teams for {}", input.channel);
     let _ = state
+        .db
         .send(Command::CreateQueue {
             channel: input.channel.clone(),
             teams: input.queue_size,
@@ -109,51 +139,29 @@ async fn create_queue(
         .await;
     let (tx, rx) = oneshot::channel();
     let _ = state
+        .db
         .send(Command::ShowQueue {
             channel: input.channel,
             resp: tx,
         })
         .await;
     let queue = rx.await.unwrap_or_else(|_| Queue::default());
-    let template = QueueTemplate { queue };
-    HtmlTemplate(template)
+    let template = state
+        .engine
+        .get_template("queue.html")
+        .unwrap()
+        .render(context! {queue => queue});
+    Ok(Html(template.unwrap()))
 }
 
-#[derive(Template)]
-#[template(path = "main.html")]
-struct MainTemplate {
-    queue: Queue,
+#[derive(Deserialize, Debug)]
+#[allow(dead_code)]
+struct AddInput {
     channel: String,
+    team: u8,
+    user: String,
 }
 
-#[derive(Template)]
-#[template(path = "queue.html")]
-struct QueueTemplate {
-    queue: Queue,
-}
 
-#[derive(Template)]
-#[template(path = "team.html")]
-struct TeamTemplate {
-    team: Team,
-    team_size: u8,
-    team_number: usize,
-}
 
-struct HtmlTemplate<T>(T);
-
-impl<T> IntoResponse for HtmlTemplate<T>
-where
-    T: Template,
-{
-    fn into_response(self) -> Response {
-        match self.0.render() {
-            Ok(html) => Html(html).into_response(),
-            Err(err) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to render template. Error: {err}"),
-            )
-                .into_response(),
-        }
-    }
 }
