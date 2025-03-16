@@ -1,0 +1,9 @@
+<div>
+    <h4>Queue de algo</h4>
+    <div>{{ queue.size }}</div>
+    <div>{{ queue.team_size }}</div>
+    {% let team_size = queue.team_size %}
+    {% for (team_number,team) in queue.teams.iter().enumerate() %}
+        {% include "team.html" %}
+    {% endfor %}
+</div>

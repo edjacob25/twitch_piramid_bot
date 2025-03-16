@@ -1,0 +1,12 @@
+<div>
+    <h4>Team {{ team_number + 1 }}</h4>
+    {% let empty_spaces = team_size - u8::try_from(team.members.len()).unwrap_or_default() %}
+    <ul>
+        {% for member in team.members %}
+            <li>{{ member.name }}</li>
+        {% endfor %}
+        {% for i in 0..empty_spaces %}
+            <li>Vacio</li>
+        {% endfor %}
+    </ul>
+</div>
