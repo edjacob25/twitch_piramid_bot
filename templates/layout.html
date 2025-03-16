@@ -17,9 +17,10 @@
             integrity="sha384-oeUn82QNXPuVkGCkcrInrS1twIxKhkZiFfr2TdiuObZ3n3yIeMiqcRzkIcguaof1"
             crossorigin="anonymous"
         ></script>
+        <script src="https://unpkg.com/htmx-ext-response-targets@2.0.2"></script>
         <title>Teams</title>
     </head>
-    <body>
+    <body hx-ext="response-targets">
         <main class="container">
             <h1>Teams</h1>
             {% block content %}{% endblock %}

@@ -1,5 +1,5 @@
 use crate::state_manager::Command;
-use crate::teams::{Member, Queue, Status, Team};
+use crate::teams::{AddResult, Member, Queue, Status, Team};
 use axum::extract::State;
 use axum::{
     Router, extract,
@@ -33,7 +33,10 @@ pub async fn create_webserver(sender: Sender<Command>) -> JoinHandle<()> {
             .route("/", get(main_handler))
             .route("/channel/{channel}", get(queue_handler))
             .route("/channel/{channel}/queue", get(queue_fragment))
-            .route("/channel/{channel}/queue/{team_num}", get(team_fragment))
+            .route(
+                "/channel/{channel}/queue/{team_num}",
+                get(team_fragment).post(add_to_queue),
+            )
             .route("/create/queue", post(create_queue))
             .with_state(app_state);
 
@@ -157,11 +160,58 @@ async fn create_queue(
 #[derive(Deserialize, Debug)]
 #[allow(dead_code)]
 struct AddInput {
-    channel: String,
-    team: u8,
     user: String,
 }
 
+async fn add_to_queue(
+    state: State<AppState>,
+    extract::Path((channel, team_num)): extract::Path<(String, usize)>,
+    extract::Form(input): extract::Form<AddInput>,
+) -> Result<Html<String>, (StatusCode, Html<String>)> {
+    info!("Adding to queue {} in channel {}", team_num, channel);
+    let (tx, rx) = oneshot::channel();
+    let _ = state
+        .db
+        .send(Command::AddToQueue {
+            channel: channel.clone(),
+            user: input.user.clone(),
+            second_user: None,
+            team: None,
+            resp: tx,
+        })
+        .await;
+    match rx.await.unwrap() {
+        AddResult::AlreadyInQueue | AddResult::NoSpace => {
+            let template = state
+                .engine
+                .get_template("error.html")
+                .unwrap()
+                .render(context! {act => true, msg => "Ya esta en algun equipo"});
+            return Err((StatusCode::CONFLICT, Html(template.unwrap())));
+        }
+        AddResult::GeneralError => {
+            let template = state
+                .engine
+                .get_template("error.html")
+                .unwrap()
+                .render(context! {act => true, msg => "Error en el servidor"});
+            return Err((StatusCode::INTERNAL_SERVER_ERROR, Html(template.unwrap())));
+        }
+        _ => {}
+    };
 
+    let (tx, rx) = oneshot::channel();
+    let _ = state
+        .db
+        .send(Command::ShowQueue {
+            channel: channel.clone(),
+            resp: tx,
+        })
+        .await;
+    let queue = rx.await.unwrap_or_else(|_| Queue::default());
 
+    let template = state.engine.get_template("team.html").unwrap().render(
+        context! {team => queue.teams[team_num], team_number => team_num, team_size => queue.team_size, channel=> channel},
+    );
+    Ok(Html(template.unwrap()))
 }

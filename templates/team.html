@@ -1,4 +1,4 @@
-<article>
+<article id="team-{{ team_number }}">
     <header>Team {{ team_number + 1 }}</header>
     {% set empty_spaces = team_size - (team.members|length) %}
     <ul>
@@ -17,9 +17,15 @@
             <li>Vacio</li>
         {% endfor %}
     </ul>
-    <form>
+    <form
+        hx-post="/channel/{{ channel }}/queue/{{ team_number }}"
+        hx-target="#team-{{ team_number }}"
+        hx-target-5*="#error_dialog"
+        hx-target-409="#error_dialog"
+        hx-swap="outerHTML"
+    >
         <label>
-            <input type="text" placeholder="usuario" name="username" />
+            <input type="text" placeholder="usuario" name="user" />
         </label>
         {% if empty_spaces == 0 %}
             <input type="submit" value="Agregar" disabled />
