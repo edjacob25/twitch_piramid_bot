@@ -1,5 +1,7 @@
+use crate::state_manager::Command;
 use crate::teams::{Member, Queue, Status, Team};
 use askama::Template;
+use axum::extract::State;
 use axum::{
     Router, extract,
     http::StatusCode,
@@ -7,15 +9,18 @@ use axum::{
     routing::get,
 };
 use log::info;
+use tokio::sync::mpsc::Sender;
+use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
-pub async fn create_webserver() -> JoinHandle<()> {
+pub async fn create_webserver(sender: Sender<Command>) -> JoinHandle<()> {
     tokio::spawn(async move {
         let app = Router::new()
             .route("/", get(main_handler))
             .route("/channel/{channel}", get(queue_handler))
             .route("/channel/{channel}/queue", get(queue_fragment))
-            .route("/channel/{channel}/queue/{team_num}", get(team_fragment));
+            .route("/channel/{channel}/queue/{team_num}", get(team_fragment))
+            .with_state(sender);
 
         // run it
         let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await.unwrap();
@@ -28,21 +33,19 @@ async fn main_handler() -> Html<&'static str> {
     Html("<h1>Hello, World!</h1>")
 }
 
-async fn queue_handler(extract::Path(channel): extract::Path<String>) -> impl IntoResponse {
+async fn queue_handler(
+    extract::Path(channel): extract::Path<String>,
+    State(state): State<Sender<Command>>,
+) -> impl IntoResponse {
     info!("Web for channel: {}", channel);
-    let queue = Queue {
-        size: 2,
-        team_size: 2,
-        teams: vec![
-            Team {
-                members: vec![Member {
-                    name: "lol".to_string(),
-                    status: Status::Confirmed,
-                }],
-            },
-            Team { members: vec![] },
-        ],
-    };
+    let (tx, rx) = oneshot::channel();
+    let _ = state
+        .send(Command::ShowQueue {
+            channel: channel.to_string(),
+            resp: tx,
+        })
+        .await;
+    let queue = rx.await.unwrap_or_else(|_| Queue::default());
     let template = MainTemplate { queue };
     HtmlTemplate(template)
 }

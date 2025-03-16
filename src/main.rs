@@ -75,7 +75,7 @@ pub async fn main() {
     let conf = Arc::new(conf);
     let _state_manager = create_state_manager(conf.clone(), rx);
     let _event_loop = create_event_loop(conf.clone(), tx.clone(), credentials);
-    let _web = create_webserver().await;
+    let _web = create_webserver(tx.clone()).await;
     let message_loop = message_loop(conf, incoming_messages, client.clone(), tx.clone());
 
     // keep the tokio executor alive.
