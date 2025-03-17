@@ -19,7 +19,11 @@
                     class="bi bi-x-square"
                     style="color: red; cursor: pointer"
                 ></i>
-                <i class="bi bi-arrow-bar-right"></i>
+                <i
+                    class="bi bi-arrow-bar-right"
+                    style="cursor: pointer"
+                    onclick="document.getElementById('confirmation_dialog').showModal(); document.getElementById('move_id').value = '{{ member.name }}'; "
+                ></i>
             </li>
         {% endfor %}
         {% for i in range(empty_spaces) %}
@@ -35,9 +39,15 @@
     >
         <label>
             {% if clear %}
-                <input type="text" placeholder="usuario" name="user" value="" />
+                <input
+                    type="text"
+                    placeholder="usuario"
+                    required
+                    name="user"
+                    value=""
+                />
             {% else %}
-                <input type="text" placeholder="usuario" name="user" />
+                <input type="text" placeholder="usuario" required name="user" />
             {% endif %}
         </label>
         {% if empty_spaces == 0 %}

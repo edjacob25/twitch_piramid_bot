@@ -1,5 +1,5 @@
 use crate::state_manager::Command;
-use crate::teams::{AddResult, DeletionResult, Member, Queue, Status, Team};
+use crate::teams::{AddResult, DeletionResult, Member, MoveResult, Queue, Status, Team};
 use axum::extract::State;
 use axum::routing::delete;
 use axum::{
@@ -33,7 +33,7 @@ pub async fn create_webserver(sender: Sender<Command>) -> JoinHandle<()> {
         let app = Router::new()
             .route("/", get(main_handler))
             .route("/channel/{channel}", get(queue_handler))
-            .route("/channel/{channel}/queue", get(queue_fragment))
+            .route("/channel/{channel}/queue", get(queue_fragment).patch(move_to_queue))
             .route(
                 "/channel/{channel}/queue/{team_num}",
                 get(team_fragment).post(add_to_queue),
@@ -218,7 +218,7 @@ async fn delete_to_queue(
     state: State<AppState>,
     extract::Path((channel, team_num, user)): extract::Path<(String, usize, String)>,
 ) -> Result<Html<String>, (StatusCode, Html<String>)> {
-    info!("Adding to queue {} in channel {}", team_num, channel);
+    info!("Deleting {} in channel {}", team_num, channel);
     let (tx, rx) = oneshot::channel();
     let _ = state
         .db
@@ -261,5 +261,72 @@ async fn delete_to_queue(
     let template = state.engine.get_template("team.html").unwrap().render(
         context! {team => queue.teams[team_num], team_number => team_num, team_size => queue.team_size, channel=> channel},
     );
+    Ok(Html(template.unwrap()))
+}
+
+#[derive(Deserialize, Debug)]
+#[allow(dead_code)]
+struct MoveInput {
+    user: String,
+    team_num: usize,
+}
+async fn move_to_queue(
+    state: State<AppState>,
+    extract::Path(channel): extract::Path<String>,
+    extract::Form(input): extract::Form<MoveInput>,
+) -> Result<Html<String>, (StatusCode, Html<String>)> {
+    let team = input.team_num - 1;
+    info!("Moving to team {} in channel {}", team, channel);
+    let (tx, rx) = oneshot::channel();
+    let _ = state
+        .db
+        .send(Command::MoveToOtherTeam {
+            channel: channel.clone(),
+            user: input.user.clone(),
+            team: team as u8,
+            resp: tx,
+        })
+        .await;
+    let err_template = state.engine.get_template("error.html").unwrap();
+    match rx.await.unwrap() {
+        MoveResult::Success => {}
+        MoveResult::NotFound => {
+            let template =
+                err_template.render(context! {act => true, msg => "Como lograste mover a alguien que no esta?"});
+            return Err((StatusCode::CONFLICT, Html(template.unwrap())));
+        }
+        MoveResult::NoSpace => {
+            let template = err_template.render(context! {act => true, msg => "No hay espacio"});
+            return Err((StatusCode::CONFLICT, Html(template.unwrap())));
+        }
+        MoveResult::InvalidTeam => {
+            let template = err_template.render(context! {act => true, msg => "Equipo invalido"});
+            return Err((StatusCode::CONFLICT, Html(template.unwrap())));
+        }
+        MoveResult::AlreadyInTeam => {
+            let template = err_template.render(context! {act => true, msg => "Ya esta en ese equipo"});
+            return Err((StatusCode::CONFLICT, Html(template.unwrap())));
+        }
+        MoveResult::GeneralError => {
+            let template = err_template.render(context! {act => true, msg => "Error en el servidor"});
+            return Err((StatusCode::INTERNAL_SERVER_ERROR, Html(template.unwrap())));
+        }
+    };
+
+    let (tx, rx) = oneshot::channel();
+    let _ = state
+        .db
+        .send(Command::ShowQueue {
+            channel: channel.clone(),
+            resp: tx,
+        })
+        .await;
+    let queue = rx.await.unwrap_or_else(|_| Queue::default());
+
+    let template = state
+        .engine
+        .get_template("queue.html")
+        .unwrap()
+        .render(context! {queue => queue, channel => channel});
     Ok(Html(template.unwrap()))
 }
