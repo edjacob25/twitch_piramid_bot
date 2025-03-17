@@ -1,4 +1,9 @@
-<div id="queue" class="grid">
+<div
+    id="queue"
+    class="grid"
+    hx-get="/channel/{{ channel }}/queue"
+    hx-trigger="every 30s"
+>
     {% set team_size = queue.team_size %}
     {% for team in queue.teams %}
         {% set team_number = loop.index0 %}

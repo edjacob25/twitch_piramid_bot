@@ -80,24 +80,20 @@ async fn queue_fragment(
     extract::Path(channel): extract::Path<String>,
 ) -> Result<Html<String>, StatusCode> {
     info!("Fragment for channel: {channel}");
-    let queue = Queue {
-        size: 2,
-        team_size: 2,
-        teams: vec![
-            Team {
-                members: vec![Member {
-                    name: "lol".to_string(),
-                    status: Status::Confirmed,
-                }],
-            },
-            Team { members: vec![] },
-        ],
-    };
+    let (tx, rx) = oneshot::channel();
+    let _ = state
+        .db
+        .send(Command::ShowQueue {
+            channel: channel.clone(),
+            resp: tx,
+        })
+        .await;
+    let queue = rx.await.unwrap_or_else(|_| Queue::default());
     let template = state
         .engine
         .get_template("queue.html")
         .unwrap()
-        .render(context! {queue => queue});
+        .render(context! {queue => queue, channel => channel});
     Ok(Html(template.unwrap()))
 }
 
