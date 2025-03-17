@@ -1,6 +1,7 @@
 use crate::state_manager::Command;
-use crate::teams::{AddResult, Member, Queue, Status, Team};
+use crate::teams::{AddResult, DeletionResult, Member, Queue, Status, Team};
 use axum::extract::State;
+use axum::routing::delete;
 use axum::{
     Router, extract,
     http::StatusCode,
@@ -37,6 +38,7 @@ pub async fn create_webserver(sender: Sender<Command>) -> JoinHandle<()> {
                 "/channel/{channel}/queue/{team_num}",
                 get(team_fragment).post(add_to_queue),
             )
+            .route("/channel/{channel}/queue/{team_num}/{user}", delete(delete_to_queue))
             .route("/create/queue", post(create_queue))
             .with_state(app_state);
 
@@ -176,7 +178,7 @@ async fn add_to_queue(
             channel: channel.clone(),
             user: input.user.clone(),
             second_user: None,
-            team: None,
+            team: Some(team_num as u8),
             resp: tx,
         })
         .await;
@@ -198,6 +200,56 @@ async fn add_to_queue(
             return Err((StatusCode::INTERNAL_SERVER_ERROR, Html(template.unwrap())));
         }
         _ => {}
+    };
+
+    let (tx, rx) = oneshot::channel();
+    let _ = state
+        .db
+        .send(Command::ShowQueue {
+            channel: channel.clone(),
+            resp: tx,
+        })
+        .await;
+    let queue = rx.await.unwrap_or_else(|_| Queue::default());
+
+    let template = state.engine.get_template("team.html").unwrap().render(
+        context! {team => queue.teams[team_num], team_number => team_num, team_size => queue.team_size, channel=> channel, clear => true},
+    );
+    Ok(Html(template.unwrap()))
+}
+
+async fn delete_to_queue(
+    state: State<AppState>,
+    extract::Path((channel, team_num, user)): extract::Path<(String, usize, String)>,
+) -> Result<Html<String>, (StatusCode, Html<String>)> {
+    info!("Adding to queue {} in channel {}", team_num, channel);
+    let (tx, rx) = oneshot::channel();
+    let _ = state
+        .db
+        .send(Command::RemoveFromQueue {
+            channel: channel.clone(),
+            user: user.clone(),
+            resp: tx,
+        })
+        .await;
+    match rx.await.unwrap() {
+        DeletionResult::GeneralError => {
+            let template = state
+                .engine
+                .get_template("error.html")
+                .unwrap()
+                .render(context! {act => true, msg => "Error en el servidor"});
+            return Err((StatusCode::INTERNAL_SERVER_ERROR, Html(template.unwrap())));
+        }
+        DeletionResult::NotFound => {
+            let template = state
+                .engine
+                .get_template("error.html")
+                .unwrap()
+                .render(context! {act => true, msg => "Como seleccionaste a alguien que no esta en algun equipo?"});
+            return Err((StatusCode::CONFLICT, Html(template.unwrap())));
+        }
+        DeletionResult::Success => {}
     };
 
     let (tx, rx) = oneshot::channel();

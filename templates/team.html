@@ -9,7 +9,16 @@
                 {% else %}
                     {{ member.name }}
                 {% endif %}
-                <i class="bi bi-x-square" style="color: red;"></i>
+                <i
+                    hx-trigger="click"
+                    hx-delete="/channel/{{ channel }}/queue/{{ team_number }}/{{ member.name }}"
+                    hx-target="#team-{{ team_number }}"
+                    hx-target-5*="#error_dialog"
+                    hx-target-409="#error_dialog"
+                    hx-swap="outerHTML"
+                    class="bi bi-x-square"
+                    style="color: red; cursor: pointer"
+                ></i>
                 <i class="bi bi-arrow-bar-right"></i>
             </li>
         {% endfor %}
@@ -25,7 +34,11 @@
         hx-swap="outerHTML"
     >
         <label>
-            <input type="text" placeholder="usuario" name="user" />
+            {% if clear %}
+                <input type="text" placeholder="usuario" name="user" value="" />
+            {% else %}
+                <input type="text" placeholder="usuario" name="user" />
+            {% endif %}
         </label>
         {% if empty_spaces == 0 %}
             <input type="submit" value="Agregar" disabled />
