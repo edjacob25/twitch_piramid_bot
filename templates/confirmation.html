@@ -11,7 +11,6 @@
             <input type="hidden" name="user" value="" id="move_id" />
             <label>
                 Equipo
-
                 <input
                     type="number"
                     min="1"
@@ -23,18 +22,17 @@
             </label>
             <input
                 type="submit"
-                value="Cancelar"
-                name="cancel_move"
-                onclick="document.getElementById('confirmation_dialog').close()"
-            />
-
-            <input
-                type="submit"
                 name="submit"
                 value="Confirmar"
                 onclick="document.getElementById('confirmation_dialog').close()"
             />
         </form>
-        <footer></footer>
+        <footer>
+            <button
+                onclick="document.getElementById('confirmation_dialog').close();"
+            >
+                Cancelar
+            </button>
+        </footer>
     </article>
 </dialog>

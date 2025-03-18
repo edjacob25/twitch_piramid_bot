@@ -1,10 +1,4 @@
-<div
-    id="queue"
-    class="grid"
-    sse-connect="/channel/{{ channel }}/sse"
-    sse-swap="message"
-    hx-swap="outerHTML"
->
+<div id="queue" class="grid">
     {% set team_size = queue.team_size %}
     {% for team in queue.teams %}
         {% set team_number = loop.index0 %}

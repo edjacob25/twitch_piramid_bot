@@ -31,7 +31,9 @@
         </label>
         <input type="submit" value="Cambiar tamaño" />
     </form>
-    {% include "queue.html" %}
+    <div sse-connect="/channel/{{ channel }}/sse" sse-swap="message">
+        {% include "queue.html" %}
+    </div>
     {% include "error.html" %}
     {% include "confirmation.html" %}
 {% endblock %}
