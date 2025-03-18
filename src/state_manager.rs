@@ -327,6 +327,7 @@ impl StateManager {
         }
     }
     fn create_queue(&self, channel: &str, teams: u8, per_team: u8) -> Result<()> {
+        info!("Creating queue for channel {channel} with {teams} teams and {per_team} spaces per team");
         let conn = Connection::open(DB_NAME)?;
         let teams_vec = (0..teams).into_iter().map(|_| Team::default()).collect::<Vec<_>>();
         let json = serde_json::to_string(&teams_vec)?;
@@ -340,6 +341,7 @@ impl StateManager {
     }
 
     fn get_queue(&self, channel: &str) -> Result<Queue> {
+        info!("Getting queue for channel {channel}");
         let conn = Connection::open(DB_NAME)?;
         conn.query_row_and_then(
             "SELECT no_teams, team_size, teams FROM queue WHERE channel = ?1",
@@ -376,6 +378,7 @@ impl StateManager {
         second_user: Option<String>,
         pref_team: Option<u8>,
     ) -> Result<AddResult> {
+        info!("Adding {user} to channel {channel}");
         let mut queue = self.get_queue(channel)?;
         let mut users = 2u8;
         let second_user = second_user.unwrap_or_else(|| {
@@ -431,6 +434,7 @@ impl StateManager {
     }
 
     fn confirm_user(&self, channel: &str, user: &str) -> Result<ConfirmResult> {
+        info!("Confirming {user} in channel {channel}");
         let mut queue = self.get_queue(channel)?;
         let mut found = false;
         let mut idx = 0;
@@ -453,6 +457,7 @@ impl StateManager {
     }
 
     fn move_to_other_team(&self, channel: &str, user: &str, desired_team: u8) -> Result<MoveResult> {
+        info!("Moving {user} to team {desired_team} in channel {channel}");
         let mut queue = self.get_queue(channel)?;
         if desired_team as usize >= queue.teams.len() {
             return Ok(MoveResult::InvalidTeam);
@@ -486,6 +491,7 @@ impl StateManager {
     }
 
     fn delete_from_queue(&self, channel: &str, user: &str) -> Result<DeletionResult> {
+        info!("Deleting {user} in channel {channel}");
         let mut queue = self.get_queue(channel)?;
         let mut found = false;
         for team in queue.teams.iter_mut() {
