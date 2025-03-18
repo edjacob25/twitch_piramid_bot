@@ -338,11 +338,11 @@ impl ChatLoop {
             if let Ok(num) = split[1].parse::<u8>() {
                 return (None, Some(num));
             }
-            return (Some(split[1].to_string()), None);
+            return (Some(split[1].replace('@',"").to_string()), None);
         }
 
         let preferred_team = split[2].parse::<u8>().ok();
-        (Some(split[1].to_string()), preferred_team)
+        (Some(split[1].replace('@',"").to_string()), preferred_team)
     }
 
     async fn join_queue(&self, user: String, channel: &str, msg: &str) {
@@ -431,7 +431,7 @@ impl ChatLoop {
         let split = msg.trim().split(' ').collect::<Vec<_>>();
         let len = split.len();
         if len > 1 {
-            return Some(split[1].to_string());
+            return Some(split[1].replace('@',"").to_string());
         }
         None
     }
@@ -486,18 +486,24 @@ impl ChatLoop {
         }
 
         let preferred_team = split[2].parse::<u8>()?;
-        Ok((preferred_team, Some(split[1].to_string())))
+        Ok((preferred_team, Some(split[1].replace('@',"").to_string())))
     }
 
     async fn move_user(&self, channel: &str, user: String, msg: &str) {
         let (team, target) = match Self::parse_move_opts(msg) {
-            Ok(res) => (res.0, res.1.unwrap_or(user)),
+            Ok(res) => (res.0, res.1.unwrap_or(user.clone())),
             Err(_) => {
                 self.say_rate_limited(channel, "Hubo un error con las opciones del comando".to_string())
                     .await;
                 return;
             }
         };
+        if user != target && user != channel {
+            self.say_rate_limited(channel, "Tu no puedes mover personas".to_string())
+                .await;
+            return;
+        }
+
         if team == 0 {
             self.say_rate_limited(channel, "No se pudo mover para el equipo 0".to_string())
                 .await;
