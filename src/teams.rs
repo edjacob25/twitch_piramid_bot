@@ -53,7 +53,7 @@ pub struct Team {
     pub members: Vec<Member>,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Queue {
     pub size: u8,
     pub team_size: u8,

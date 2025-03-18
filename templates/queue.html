@@ -1,8 +1,9 @@
 <div
     id="queue"
     class="grid"
-    hx-get="/channel/{{ channel }}/queue"
-    hx-trigger="every 30s"
+    sse-connect="/channel/{{ channel }}/sse"
+    sse-swap="message"
+    hx-swap="outerHTML"
 >
     {% set team_size = queue.team_size %}
     {% for team in queue.teams %}

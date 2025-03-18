@@ -9,6 +9,7 @@ default-run = "twitch_piramid_bot"
 [dependencies]
 anyhow = "1.0"
 async-trait = "0.1"
+async-stream = "0.3"
 axum =  {  version = "0.8", features = ["macros"] }
 chrono = { version = "0.4", features = ["serde"] }
 config = { version = "0.15", features = ["toml"] }

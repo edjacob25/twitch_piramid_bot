@@ -1,6 +1,8 @@
 use crate::state_manager::Command;
 use crate::teams::{AddResult, DeletionResult, Member, MoveResult, Queue, Status, Team};
+use async_stream::stream;
 use axum::extract::State;
+use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
 use axum::routing::delete;
 use axum::{
     Router, extract,
@@ -8,9 +10,12 @@ use axum::{
     response::Html,
     routing::{get, post},
 };
+use futures_util::Stream;
 use log::info;
 use minijinja::{Environment, context, path_loader};
 use serde::Deserialize;
+use std::convert::Infallible;
+use tokio::sync::broadcast::Sender as BroadcastSender;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
@@ -19,8 +24,9 @@ use tokio::task::JoinHandle;
 struct AppState {
     engine: Environment<'static>,
     db: Sender<Command>,
+    notifications: BroadcastSender<(Queue, String)>,
 }
-pub async fn create_webserver(sender: Sender<Command>) -> JoinHandle<()> {
+pub async fn create_webserver(sender: Sender<Command>, broad_send: BroadcastSender<(Queue, String)>) -> JoinHandle<()> {
     tokio::spawn(async move {
         let mut env = Environment::new();
         env.set_loader(path_loader("templates"));
@@ -28,11 +34,13 @@ pub async fn create_webserver(sender: Sender<Command>) -> JoinHandle<()> {
         let app_state = AppState {
             engine: env,
             db: sender,
+            notifications: broad_send,
         };
 
         let app = Router::new()
             .route("/", get(main_handler))
             .route("/channel/{channel}", get(queue_handler))
+            .route("/channel/{channel}/sse", get(sse_handler))
             .route("/channel/{channel}/queue", get(queue_fragment).patch(move_to_queue))
             .route(
                 "/channel/{channel}/queue/{team_num}",
@@ -51,6 +59,30 @@ pub async fn create_webserver(sender: Sender<Command>) -> JoinHandle<()> {
 
 async fn main_handler() -> Html<&'static str> {
     Html("<h1>Hello, World!</h1>")
+}
+
+async fn sse_handler(
+    State(state): State<AppState>,
+    extract::Path(channel): extract::Path<String>,
+) -> Sse<impl Stream<Item = Result<SseEvent, Infallible>>> {
+    let mut rx = state.notifications.subscribe();
+    let mut env = Environment::new();
+    env.set_loader(path_loader("templates"));
+    info!("Starting sse");
+    Sse::new(stream! {
+        while let Ok((queue, e_channel)) = rx.recv().await {
+            if e_channel == channel{
+                let template = env
+                    .get_template("queue.html")
+                    .unwrap();
+                info!("Sending update");
+                let msg = template.render(context! {queue => queue, channel => channel}).unwrap();
+                yield Ok(SseEvent::default().data::<String>(msg))
+            }
+
+        }
+    })
+    .keep_alive(KeepAlive::default())
 }
 
 async fn queue_handler(

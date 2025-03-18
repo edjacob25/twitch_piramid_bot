@@ -5,7 +5,7 @@ use file_rotate::{ContentLimit, FileRotate, TimeFrequency};
 use simplelog::{ColorChoice, CombinedLogger, ConfigBuilder, TermLogger, TerminalMode, WriteLogger};
 use std::path::Path;
 use std::sync::Arc;
-use tokio::sync::mpsc;
+use tokio::sync::{broadcast, mpsc};
 use twitch_irc::ClientConfig;
 use twitch_irc::SecureWSTransport;
 use twitch_irc::TwitchIRCClient;
@@ -72,10 +72,11 @@ pub async fn main() {
     //client.send_message(IRCMessage::parse("CAP REQ :twitch.tv/commands twitch.tv/tags").unwrap());
 
     let (tx, rx) = mpsc::channel(32);
+    let (broadcast, _) = broadcast::channel(10);
     let conf = Arc::new(conf);
-    let _state_manager = create_state_manager(conf.clone(), rx);
+    let _state_manager = create_state_manager(conf.clone(), rx, broadcast.clone());
     let _event_loop = create_event_loop(conf.clone(), tx.clone(), credentials);
-    let _web = create_webserver(tx.clone()).await;
+    let _web = create_webserver(tx.clone(), broadcast).await;
     let message_loop = message_loop(conf, incoming_messages, client.clone(), tx.clone());
 
     // keep the tokio executor alive.

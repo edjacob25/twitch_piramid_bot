@@ -12,6 +12,7 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
 use std::sync::Arc;
+use tokio::sync::broadcast::Sender;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
@@ -130,6 +131,7 @@ struct StreamPrediction {
 struct StateManager {
     conf: Arc<BotConfig>,
     receiver: Receiver<Command>,
+    sender: Sender<(Queue, String)>,
     streams_data: HashMap<String, Event>,
 }
 
@@ -363,6 +365,7 @@ impl StateManager {
         ) {
             bail!("Db error when {operation} user to channel {channel}: {e}");
         };
+        self.sender.send((queue, channel.to_string())).ok();
         Ok(())
     }
 
@@ -589,7 +592,7 @@ impl StateManager {
             self.process_command(cmd);
         }
     }
-    fn new(conf: Arc<BotConfig>, receiver: Receiver<Command>) -> StateManager {
+    fn new(conf: Arc<BotConfig>, receiver: Receiver<Command>, sender: Sender<(Queue, String)>) -> StateManager {
         info!("Starting manager");
         initialize_db().expect("Could not initialize db");
 
@@ -597,6 +600,7 @@ impl StateManager {
         StateManager {
             conf,
             receiver,
+            sender,
             streams_data,
         }
     }
@@ -695,8 +699,9 @@ fn initialize_db() -> Result<()> {
 pub fn create_state_manager(
     conf: Arc<BotConfig>,
     receiver: Receiver<Command>,
+    sender: Sender<(Queue, String)>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
-        StateManager::new(conf, receiver).run().await;
+        StateManager::new(conf, receiver, sender).run().await;
     })
 }
