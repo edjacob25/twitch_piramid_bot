@@ -1,0 +1,21 @@
+{% if act %}
+    {% set act = "open" %}
+{% else %}
+    {% set act = "" %}
+{% endif %}
+<dialog {{ act }} id="error_dialog">
+    <article>
+        <h2>Hubo un error</h2>
+        {% if msg %}
+            {{ msg }}
+        {% endif %}
+        <footer>
+            <button
+                name="accept_err"
+                onclick="document.getElementById('error_dialog').close()"
+            >
+                Aceptar
+            </button>
+        </footer>
+    </article>
+</dialog>

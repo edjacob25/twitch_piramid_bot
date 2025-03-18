@@ -1,0 +1,40 @@
+<dialog id="confirmation_dialog">
+    <article>
+        <h2>Mover a</h2>
+        <form
+            hx-patch="/channel/{{ channel }}/queue"
+            hx-target="#queue"
+            hx-target-5*="#error_dialog"
+            hx-target-409="#error_dialog"
+            hx-swap="outerHTML"
+        >
+            <input type="hidden" name="user" value="" id="move_id" />
+            <label>
+                Equipo
+
+                <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    name="team_num"
+                    placeholder="1"
+                    required
+                />
+            </label>
+            <input
+                type="submit"
+                value="Cancelar"
+                name="cancel_move"
+                onclick="document.getElementById('confirmation_dialog').close()"
+            />
+
+            <input
+                type="submit"
+                name="submit"
+                value="Confirmar"
+                onclick="document.getElementById('confirmation_dialog').close()"
+            />
+        </form>
+        <footer></footer>
+    </article>
+</dialog>

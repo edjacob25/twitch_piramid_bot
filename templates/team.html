@@ -1,0 +1,59 @@
+<article id="team-{{ team_number }}">
+    <header>Team {{ team_number + 1 }}</header>
+    {% set empty_spaces = team_size - (team.members|length) %}
+    <ul>
+        {% for member in team.members %}
+            <li>
+                {% if member.status == "Confirmed" %}
+                    <ins>{{ member.name }}</ins>
+                {% else %}
+                    {{ member.name }}
+                {% endif %}
+                <i
+                    hx-trigger="click"
+                    hx-delete="/channel/{{ channel }}/queue/{{ team_number }}/{{ member.name }}"
+                    hx-target="#team-{{ team_number }}"
+                    hx-target-5*="#error_dialog"
+                    hx-target-409="#error_dialog"
+                    hx-swap="outerHTML"
+                    class="bi bi-x-square"
+                    style="color: red; cursor: pointer"
+                ></i>
+                <i
+                    class="bi bi-arrow-bar-right"
+                    style="cursor: pointer"
+                    onclick="document.getElementById('confirmation_dialog').showModal(); document.getElementById('move_id').value = '{{ member.name }}'; "
+                ></i>
+            </li>
+        {% endfor %}
+        {% for i in range(empty_spaces) %}
+            <li>Vacio</li>
+        {% endfor %}
+    </ul>
+    <form
+        hx-post="/channel/{{ channel }}/queue/{{ team_number }}"
+        hx-target="#team-{{ team_number }}"
+        hx-target-5*="#error_dialog"
+        hx-target-409="#error_dialog"
+        hx-swap="outerHTML"
+    >
+        <label>
+            {% if clear %}
+                <input
+                    type="text"
+                    placeholder="usuario"
+                    required
+                    name="user"
+                    value=""
+                />
+            {% else %}
+                <input type="text" placeholder="usuario" required name="user" />
+            {% endif %}
+        </label>
+        {% if empty_spaces == 0 %}
+            <input type="submit" value="Agregar" disabled />
+        {% else %}
+            <input type="submit" value="Agregar" />
+        {% endif %}
+    </form>
+</article>

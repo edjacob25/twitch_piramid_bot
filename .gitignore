@@ -6,3 +6,5 @@ settings.toml
 *.sqlite
 *.db
 data/
+node_modules/
+package-lock.json

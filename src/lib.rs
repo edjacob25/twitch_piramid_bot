@@ -6,4 +6,6 @@ pub mod event_data;
 pub mod event_loop;
 pub mod pyramid_action;
 pub mod state_manager;
+mod teams;
 pub mod twitch_ws;
+pub mod web;
