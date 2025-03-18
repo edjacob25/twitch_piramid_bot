@@ -46,7 +46,7 @@ pub async fn create_webserver(sender: Sender<Command>, broad_send: BroadcastSend
                 "/channel/{channel}/queue/{team_num}",
                 get(team_fragment).post(add_to_queue),
             )
-            .route("/channel/{channel}/queue/{team_num}/{user}", delete(delete_to_queue))
+            .route("/channel/{channel}/queue/{team_num}/{user}", delete(delete_from_queue))
             .route("/create/queue", post(create_queue))
             .with_state(app_state);
 
@@ -174,7 +174,7 @@ async fn create_queue(
     let _ = state
         .db
         .send(Command::ShowQueue {
-            channel: input.channel,
+            channel: input.channel.clone(),
             resp: tx,
         })
         .await;
@@ -183,7 +183,7 @@ async fn create_queue(
         .engine
         .get_template("queue.html")
         .unwrap()
-        .render(context! {queue => queue});
+        .render(context! {queue => queue, channel => input.channel});
     Ok(Html(template.unwrap()))
 }
 
@@ -246,7 +246,7 @@ async fn add_to_queue(
     Ok(Html(template.unwrap()))
 }
 
-async fn delete_to_queue(
+async fn delete_from_queue(
     state: State<AppState>,
     extract::Path((channel, team_num, user)): extract::Path<(String, usize, String)>,
 ) -> Result<Html<String>, (StatusCode, Html<String>)> {
