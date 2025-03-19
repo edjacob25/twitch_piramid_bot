@@ -62,7 +62,7 @@ pub struct Queue {
 
 impl Display for Team {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if self.members.len() == 0 {
+        if self.members.is_empty() {
             write!(f, "Equipo vacio")?;
             return Ok(());
         }
@@ -85,7 +85,7 @@ impl Display for Queue {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} por equipo: | ", self.team_size)?;
         for team in &self.teams {
-            write!(f, "{} | ", team)?;
+            write!(f, "{team} | ")?;
         }
         Ok(())
     }

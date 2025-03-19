@@ -274,21 +274,21 @@ impl ChatLoop {
     async fn handle_queue(&mut self, msg: &ChatMessage) {
         let channel = &msg.channel_login;
         let user = msg.sender.login.clone();
-        let _admin = self.check_admin(&msg);
+        let _admin = Self::check_admin(msg);
         match msg.message_text.as_str().trim() {
-            s if s.starts_with("!crear") => self.create_queue(&user, &channel, s).await,
-            s if s.starts_with("!entrar") => self.join_queue(user, &channel, s).await,
-            s if s.starts_with("!borrar") => self.admin_remove(&channel, &user, s).await,
-            s if s.starts_with("!mover") => self.move_user(&channel, user, s).await,
-            s if s.starts_with("!llamar") => self.call_team(&channel, s).await,
-            "!salir" => self.delete_user(&channel, user).await,
-            "!confirmar" => self.confirm_user(&channel, user).await,
-            "!equipos" => self.show_queue(&channel).await,
+            s if s.starts_with("!crear") => self.create_queue(&user, channel, s).await,
+            s if s.starts_with("!entrar") => self.join_queue(user, channel, s).await,
+            s if s.starts_with("!borrar") => self.admin_remove(channel, &user, s).await,
+            s if s.starts_with("!mover") => self.move_user(channel, user, s).await,
+            s if s.starts_with("!llamar") => self.call_team(channel, s).await,
+            "!salir" => self.delete_user(channel, user).await,
+            "!confirmar" => self.confirm_user(channel, user).await,
+            "!equipos" => self.show_queue(channel).await,
             _ => {}
         }
     }
 
-    fn check_admin(&self, msg: &ChatMessage) -> bool {
+    fn check_admin(msg: &ChatMessage) -> bool {
         let badges = msg.badges.iter().map(|b| b.name.to_lowercase()).collect::<Vec<_>>();
         badges.iter().any(|x| x.eq("broadcaster") || x.eq("moderator"))
     }
@@ -326,7 +326,7 @@ impl ChatLoop {
             channel,
             "Error al llamar el comando !crear, prueba con algo como '!crear 3 3' ".to_string(),
         )
-        .await
+        .await;
     }
 
     fn parse_join_opts(msg: &str) -> (Option<String>, Option<u8>) {
@@ -370,7 +370,7 @@ impl ChatLoop {
         match result {
             Success(t) => {
                 self.say_rate_limited(channel, format!("Anotado(s) en el equipo {}", t + 1))
-                    .await
+                    .await;
             }
             AlreadyInQueue => {
                 let comp = if extra.is_some() {
@@ -379,11 +379,11 @@ impl ChatLoop {
                     user
                 };
                 self.say_rate_limited(channel, format!("No se pudo agregar, {comp} ya esta en algún equipo"))
-                    .await
+                    .await;
             }
             NoSpace => {
                 self.say_rate_limited(channel, "No se pudo agregar, no hay lugares suficientes".to_string())
-                    .await
+                    .await;
             }
             GeneralError => self.say_rate_limited(channel, "No se pudo anotar".to_string()).await,
         }
@@ -418,11 +418,11 @@ impl ChatLoop {
         match rx.await.unwrap_or(GeneralError) {
             Success(i) => {
                 self.say_rate_limited(channel, format!("{user} confirmado en equipo {}", i + 1))
-                    .await
+                    .await;
             }
             NotFound => {
                 self.say_rate_limited(channel, format!("{user} no encontrado para confirmar"))
-                    .await
+                    .await;
             }
             GeneralError => self.say_rate_limited(channel, "No se pudo confirmar".to_string()).await,
         }
@@ -491,13 +491,12 @@ impl ChatLoop {
     }
 
     async fn move_user(&self, channel: &str, user: String, msg: &str) {
-        let (team, target) = match Self::parse_move_opts(msg) {
-            Ok(res) => (res.0, res.1.unwrap_or(user.clone())),
-            Err(_) => {
-                self.say_rate_limited(channel, "Hubo un error con las opciones del comando".to_string())
-                    .await;
-                return;
-            }
+        let (team, target) = if let Ok(res) = Self::parse_move_opts(msg) {
+            (res.0, res.1.unwrap_or(user.clone()))
+        } else {
+            self.say_rate_limited(channel, "Hubo un error con las opciones del comando".to_string())
+                .await;
+            return;
         };
         if user != target && user != channel {
             self.say_rate_limited(channel, "Tu no puedes mover personas".to_string())
@@ -556,13 +555,10 @@ impl ChatLoop {
     }
 
     async fn call_team(&self, channel: &str, msg: &str) {
-        let team = match Self::parse_call_opts(msg) {
-            Ok(t) => t,
-            Err(_) => {
-                self.say_rate_limited(channel, format!("Error con las opciones del comano"))
-                    .await;
-                return;
-            }
+        let Ok(team) = Self::parse_call_opts(msg) else {
+            self.say_rate_limited(channel, "Error con las opciones del comando".to_string())
+                .await;
+            return;
         };
         let (tx, rx) = oneshot::channel();
 
@@ -576,11 +572,11 @@ impl ChatLoop {
 
         if let Ok(queue) = rx.await {
             if team < 1 || team > queue.teams.len() {
-                self.say_rate_limited(channel, format!("Ese equipo no existe")).await;
+                self.say_rate_limited(channel, "Ese equipo no existe".to_string()).await;
                 return;
             }
             let mut msg = "Llamando a ".to_string();
-            for member in queue.teams[team - 1].members.iter() {
+            for member in &queue.teams[team - 1].members {
                 msg.push_str(&format!("@{}, ", member.name));
             }
             self.say_rate_limited(channel, msg).await;
@@ -622,7 +618,7 @@ impl ChatLoop {
                         ChatAction::Queue => {
                             self.handle_queue(&msg).await;
                         }
-                        _ => {}
+                        ChatAction::GiveSO => {}
                     }
                 }
             }

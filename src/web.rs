@@ -51,7 +51,9 @@ pub async fn create_webserver(sender: Sender<Command>, broad_send: BroadcastSend
             .with_state(app_state);
 
         // run it
-        let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+        let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
+            .await
+            .expect("Could not bind web server port");
         info!("listening on {}", listener.local_addr().unwrap());
         axum::serve(listener, app).await.unwrap();
     })
@@ -227,7 +229,7 @@ async fn add_to_queue(
                 .render(context! {act => true, msg => "Error en el servidor"});
             return Err((StatusCode::INTERNAL_SERVER_ERROR, Html(template.unwrap())));
         }
-        _ => {}
+        AddResult::Success(_) => {}
     };
 
     let (tx, rx) = oneshot::channel();

@@ -245,14 +245,14 @@ impl StateManager {
             }
             // Buts
             CountBits { channel, user, bits } => {
-                let res = self.save_bits(channel.as_str(), user.as_str(), bits);
+                let res = Self::save_bits(&channel, &user, bits);
                 if let Err(e) = res {
                     error!("Could not save bits {:?}", e);
                 }
             }
             // Pyramids
             IncrementPyramid { channel, user, resp } => {
-                let res = self.increment_pyramid_count(channel, user).unwrap_or_else(|e| {
+                let res = Self::increment_pyramid_count(&channel, &user).unwrap_or_else(|e| {
                     error!("Error when incrementing the pyramid: {e}");
                     0
                 });
@@ -314,7 +314,7 @@ impl StateManager {
                     let _ = resp.send(MoveResult::GeneralError);
                 }
             },
-            ShowQueue { channel, resp } => match self.get_queue(&channel) {
+            ShowQueue { channel, resp } => match Self::get_queue(&channel) {
                 Ok(res) => {
                     debug!("Queue from db {:?}", res);
                     let _ = resp.send(res);
@@ -329,7 +329,7 @@ impl StateManager {
     fn create_queue(&self, channel: &str, teams: u8, per_team: u8) -> Result<()> {
         info!("Creating queue for channel {channel} with {teams} teams and {per_team} spaces per team");
         let conn = Connection::open(DB_NAME)?;
-        let teams_vec = (0..teams).into_iter().map(|_| Team::default()).collect::<Vec<_>>();
+        let teams_vec = (0..teams).map(|_| Team::default()).collect::<Vec<_>>();
         let json = serde_json::to_string(&teams_vec)?;
         if let Err(e) = conn.execute(
             "INSERT INTO queue VALUES (?1, ?2, ?3, $4) ON CONFLICT(channel) DO UPDATE SET no_teams=?2, team_size=?3, teams=$4",
@@ -337,10 +337,16 @@ impl StateManager {
         ) {
             bail!("Db error when creating queue: {}", e);
         };
+        let q = Queue {
+            size: teams,
+            team_size: per_team,
+            teams: teams_vec,
+        };
+        self.sender.send((q, channel.to_string())).ok();
         Ok(())
     }
 
-    fn get_queue(&self, channel: &str) -> Result<Queue> {
+    fn get_queue(channel: &str) -> Result<Queue> {
         info!("Getting queue for channel {channel}");
         let conn = Connection::open(DB_NAME)?;
         conn.query_row_and_then(
@@ -379,16 +385,16 @@ impl StateManager {
         pref_team: Option<u8>,
     ) -> Result<AddResult> {
         info!("Adding {user} to channel {channel}");
-        let mut queue = self.get_queue(channel)?;
+        let mut queue = Self::get_queue(channel)?;
         let mut users = 2u8;
         let second_user = second_user.unwrap_or_else(|| {
             users = 1;
-            "".to_string()
+            String::new()
         });
 
         let mut free_spaces = vec![];
         let mut already_found = false;
-        for team in queue.teams.iter() {
+        for team in &queue.teams {
             free_spaces.push(queue.team_size - team.members.len() as u8);
             let names = team.members.iter().map(|x| x.name.as_str()).collect::<Vec<_>>();
             if names.contains(&user.as_str()) || (users == 2 && names.contains(&second_user.as_str())) {
@@ -435,11 +441,11 @@ impl StateManager {
 
     fn confirm_user(&self, channel: &str, user: &str) -> Result<ConfirmResult> {
         info!("Confirming {user} in channel {channel}");
-        let mut queue = self.get_queue(channel)?;
+        let mut queue = Self::get_queue(channel)?;
         let mut found = false;
         let mut idx = 0;
-        for team in queue.teams.iter_mut() {
-            for member in team.members.iter_mut() {
+        for team in &mut queue.teams {
+            for member in &mut team.members {
                 if member.name == user && member.status == Unconfirmed {
                     member.status = Confirmed;
                     found = true;
@@ -448,17 +454,17 @@ impl StateManager {
             }
             idx += 1;
         }
-        if !found {
-            Ok(ConfirmResult::NotFound)
-        } else {
+        if found {
             self.update_queue(channel, queue, "confirming")?;
             Ok(ConfirmResult::Success(idx))
+        } else {
+            Ok(ConfirmResult::NotFound)
         }
     }
 
     fn move_to_other_team(&self, channel: &str, user: &str, desired_team: u8) -> Result<MoveResult> {
         info!("Moving {user} to team {desired_team} in channel {channel}");
-        let mut queue = self.get_queue(channel)?;
+        let mut queue = Self::get_queue(channel)?;
         if desired_team as usize >= queue.teams.len() {
             return Ok(MoveResult::InvalidTeam);
         }
@@ -492,9 +498,9 @@ impl StateManager {
 
     fn delete_from_queue(&self, channel: &str, user: &str) -> Result<DeletionResult> {
         info!("Deleting {user} in channel {channel}");
-        let mut queue = self.get_queue(channel)?;
+        let mut queue = Self::get_queue(channel)?;
         let mut found = false;
-        for team in queue.teams.iter_mut() {
+        for team in &mut queue.teams {
             for (idx, member) in team.members.iter().enumerate() {
                 if member.name == user {
                     team.members.remove(idx);
@@ -504,15 +510,15 @@ impl StateManager {
             }
         }
 
-        if !found {
-            Ok(DeletionResult::NotFound)
-        } else {
+        if found {
             self.update_queue(channel, queue, "deleting")?;
             Ok(DeletionResult::Success)
+        } else {
+            Ok(DeletionResult::NotFound)
         }
     }
 
-    fn increment_pyramid_count(&self, channel: String, user: String) -> Result<i32> {
+    fn increment_pyramid_count(channel: &str, user: &str) -> Result<i32> {
         let conn = Connection::open(DB_NAME).expect("Could not open db");
         conn.execute(
             "INSERT INTO pyramids (channel, person) VALUES (?1, ?2) ON CONFLICT(channel, person) DO UPDATE SET count=count+1",
@@ -529,7 +535,7 @@ impl StateManager {
         Ok(res)
     }
 
-    fn save_bits(&self, channel: &str, user: &str, bits: u64) -> Result<()> {
+    fn save_bits(channel: &str, user: &str, bits: u64) -> Result<()> {
         let conn = Connection::open(DB_NAME).with_context(|| "Could not open db")?;
         let now: DateTime<Local> = Local::now();
         conn.execute(

@@ -384,14 +384,6 @@ impl EventLoop {
                         warn!("Resetting connection to base level");
                         address = "wss://eventsub.wss.twitch.tv/ws".to_string();
                         let _ = ws_write.close();
-                        // if last_client.is_some() {
-                        //     let (mut old_w, old_r) = last_client.unwrap();
-                        //     let _ = old_w.close();
-                        //     last_client = None;
-                        //     drop(old_w);
-                        //     drop(old_r);
-                        //     error!("Closing it and dropping if necessary")
-                        // }
                         for current_subscription in &current_subscriptions {
                             warn!("Unregistering subscription {}", current_subscription);
                             if let Err(e) = self.unregister_events(current_subscription).await {
@@ -407,7 +399,7 @@ impl EventLoop {
                         let pong = Message::Pong(data);
                         let _res = ws_write.send(pong);
                     }
-                    _ => {}
+                    MessageResponse::Continue => {}
                 }
             }
             last_client = Some((ws_write, ws_read));
