@@ -280,6 +280,7 @@ impl ChatLoop {
             s if s.starts_with("!entrar") => self.join_queue(user, &channel, s).await,
             s if s.starts_with("!borrar") => self.admin_remove(&channel, &user, s).await,
             s if s.starts_with("!mover") => self.move_user(&channel, user, s).await,
+            s if s.starts_with("!llamar") => self.call_team(&channel, s).await,
             "!salir" => self.delete_user(&channel, user).await,
             "!confirmar" => self.confirm_user(&channel, user).await,
             "!equipos" => self.show_queue(&channel).await,
@@ -338,11 +339,11 @@ impl ChatLoop {
             if let Ok(num) = split[1].parse::<u8>() {
                 return (None, Some(num));
             }
-            return (Some(split[1].replace('@',"").to_string()), None);
+            return (Some(split[1].replace('@', "").to_string()), None);
         }
 
         let preferred_team = split[2].parse::<u8>().ok();
-        (Some(split[1].replace('@',"").to_string()), preferred_team)
+        (Some(split[1].replace('@', "").to_string()), preferred_team)
     }
 
     async fn join_queue(&self, user: String, channel: &str, msg: &str) {
@@ -431,7 +432,7 @@ impl ChatLoop {
         let split = msg.trim().split(' ').collect::<Vec<_>>();
         let len = split.len();
         if len > 1 {
-            return Some(split[1].replace('@',"").to_string());
+            return Some(split[1].replace('@', "").to_string());
         }
         None
     }
@@ -486,7 +487,7 @@ impl ChatLoop {
         }
 
         let preferred_team = split[2].parse::<u8>()?;
-        Ok((preferred_team, Some(split[1].replace('@',"").to_string())))
+        Ok((preferred_team, Some(split[1].replace('@', "").to_string())))
     }
 
     async fn move_user(&self, channel: &str, user: String, msg: &str) {
@@ -542,6 +543,50 @@ impl ChatLoop {
                 self.say_rate_limited(channel, format!("No se pudo mover {target} al equipo {team}"))
                     .await;
             }
+        }
+    }
+
+    fn parse_call_opts(msg: &str) -> Result<usize> {
+        let split = msg.trim().split(' ').collect::<Vec<_>>();
+        let len = split.len();
+        if len == 1 {
+            bail!("No team selected");
+        }
+        Ok(split[1].parse::<usize>()?)
+    }
+
+    async fn call_team(&self, channel: &str, msg: &str) {
+        let team = match Self::parse_call_opts(msg) {
+            Ok(t) => t,
+            Err(_) => {
+                self.say_rate_limited(channel, format!("Error con las opciones del comano"))
+                    .await;
+                return;
+            }
+        };
+        let (tx, rx) = oneshot::channel();
+
+        let _ = self
+            .sender
+            .send(Command::ShowQueue {
+                channel: channel.to_string(),
+                resp: tx,
+            })
+            .await;
+
+        if let Ok(queue) = rx.await {
+            if team < 1 || team > queue.teams.len() {
+                self.say_rate_limited(channel, format!("Ese equipo no existe")).await;
+                return;
+            }
+            let mut msg = "Llamando a ".to_string();
+            for member in queue.teams[team - 1].members.iter() {
+                msg.push_str(&format!("@{}, ", member.name));
+            }
+            self.say_rate_limited(channel, msg).await;
+        } else {
+            self.say_rate_limited(channel, "No se pueden llamar por el momento".to_string())
+                .await;
         }
     }
 
