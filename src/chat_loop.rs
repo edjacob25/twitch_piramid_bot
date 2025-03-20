@@ -576,9 +576,14 @@ impl ChatLoop {
                 return;
             }
             let mut msg = "Llamando a ".to_string();
-            for member in &queue.teams[team - 1].members {
-                msg.push_str(&format!("@{}, ", member.name));
+
+            if let Some(m) = queue.teams[team - 1].members.first() {
+                msg.push_str(&format!("@{}", m.name));
             }
+            for member in queue.teams[team - 1].members.iter().skip(1) {
+                msg.push_str(&format!(", @{}", member.name));
+            }
+            msg.push_str(&format!(" para el equipo {team}"));
             self.say_rate_limited(channel, msg).await;
         } else {
             self.say_rate_limited(channel, "No se pueden llamar por el momento".to_string())
