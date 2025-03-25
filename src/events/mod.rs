@@ -1,6 +1,6 @@
 use crate::bot_config::{BotConfig, Ntfy};
 use crate::bot_token_storage::CustomTokenStorage;
-use crate::state::Command;
+use crate::state::command::Command;
 use anyhow::{Result, anyhow, bail};
 use event_data::*;
 use futures_util::{SinkExt, StreamExt};

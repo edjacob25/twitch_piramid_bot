@@ -4,5 +4,4 @@ pub mod bot_token_storage;
 pub mod chat;
 pub mod events;
 pub mod state;
-mod teams;
 pub mod web;

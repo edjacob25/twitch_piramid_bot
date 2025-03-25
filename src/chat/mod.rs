@@ -1,7 +1,8 @@
 use crate::bot_action::BotAction;
 use crate::bot_config::{BotConfig, ChannelConfig};
 use crate::bot_token_storage::CustomTokenStorage;
-use crate::state::{Command, Source};
+use crate::state::Source;
+use crate::state::command::Command;
 use anyhow::{Result, bail};
 use governor::Quota;
 use governor::clock::DefaultClock;
@@ -368,7 +369,7 @@ impl ChatLoop {
             resp: tx,
         };
         let _ = self.sender.send(cmd).await;
-        use crate::teams::AddResult::*;
+        use crate::state::data::AddResult::*;
         let result = rx.await.unwrap_or(GeneralError);
         match result {
             Success(t) => {
@@ -421,7 +422,7 @@ impl ChatLoop {
             resp: tx,
         };
         let _ = self.sender.send(cmd).await;
-        use crate::teams::ConfirmResult::*;
+        use crate::state::data::ConfirmResult::*;
         match rx.await.unwrap_or(GeneralError) {
             Success(i) => {
                 self.say_rate_limited(channel, format!("{user} confirmado en equipo {}", i + 1))
@@ -467,7 +468,7 @@ impl ChatLoop {
             resp: tx,
         };
         let _ = self.sender.send(cmd).await;
-        use crate::teams::DeletionResult::*;
+        use crate::state::data::DeletionResult::*;
         match rx.await.unwrap_or(GeneralError) {
             Success => {
                 self.say_rate_limited(channel, format!("{user} ha sido borrado de la cola"))
@@ -530,7 +531,7 @@ impl ChatLoop {
             resp: tx,
         };
         let _ = self.sender.send(cmd).await;
-        use crate::teams::MoveResult::*;
+        use crate::state::data::MoveResult::*;
         match rx.await.unwrap_or(GeneralError) {
             Success => {
                 self.say_rate_limited(channel, format!("{target} ha sido movido al equipo {team}"))
