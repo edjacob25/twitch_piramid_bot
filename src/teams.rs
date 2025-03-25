@@ -83,6 +83,11 @@ impl Display for Team {
 
 impl Display for Queue {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.size == 0 {
+            write!(f, "No hay equipos")?;
+            return Ok(());
+        }
+
         write!(f, "{} por equipo: | ", self.team_size)?;
         for team in &self.teams {
             write!(f, "{team} | ")?;
