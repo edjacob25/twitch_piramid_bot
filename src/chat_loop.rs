@@ -2,7 +2,7 @@ use crate::bot_config::{BotConfig, ChannelConfig};
 use crate::bot_token_storage::CustomTokenStorage;
 use crate::chat_action::ChatAction;
 use crate::pyramid_action::PyramidAction;
-use crate::state_manager::Command;
+use crate::state_manager::{Command, Source};
 use anyhow::{Result, bail};
 use governor::Quota;
 use governor::clock::DefaultClock;
@@ -362,6 +362,7 @@ impl ChatLoop {
             user: user.clone(),
             second_user: extra.clone(),
             team,
+            source: Source::Chat,
             resp: tx,
         };
         let _ = self.sender.send(cmd).await;
@@ -386,6 +387,10 @@ impl ChatLoop {
                     .await;
             }
             GeneralError => self.say_rate_limited(channel, "No se pudo anotar".to_string()).await,
+            QueueFrozen => {
+                self.say_rate_limited(channel, "No se puede agregar. La lista esta congelada".to_string())
+                    .await;
+            }
         }
     }
 
@@ -456,6 +461,7 @@ impl ChatLoop {
         let cmd = Command::RemoveFromQueue {
             channel: channel.to_string(),
             user: user.clone(),
+            source: Source::Chat,
             resp: tx,
         };
         let _ = self.sender.send(cmd).await;
@@ -471,6 +477,10 @@ impl ChatLoop {
             }
             GeneralError => {
                 self.say_rate_limited(channel, format!("Ha habido un error borrando {user}"))
+                    .await;
+            }
+            QueueFrozen => {
+                self.say_rate_limited(channel, "No se puede borrar. La lista esta congelada".to_string())
                     .await;
             }
         }
@@ -514,6 +524,7 @@ impl ChatLoop {
             channel: channel.to_string(),
             user: target.clone(),
             team: team - 1,
+            source: Source::Chat,
             resp: tx,
         };
         let _ = self.sender.send(cmd).await;
@@ -540,6 +551,10 @@ impl ChatLoop {
             }
             GeneralError => {
                 self.say_rate_limited(channel, format!("No se pudo mover {target} al equipo {team}"))
+                    .await;
+            }
+            QueueFrozen => {
+                self.say_rate_limited(channel, "No se puede mover. La lista esta congelada".to_string())
                     .await;
             }
         }

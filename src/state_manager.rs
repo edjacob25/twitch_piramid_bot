@@ -9,6 +9,7 @@ use log::{debug, error, info};
 use reqwest::Client;
 use rusqlite::{Connection, params};
 use serde::Deserialize;
+use std::cmp::PartialEq;
 use std::collections::HashMap;
 use std::fs;
 use std::sync::Arc;
@@ -21,6 +22,12 @@ use twitch_irc::login::TokenStorage;
 type Responder<T> = oneshot::Sender<T>;
 
 const DB_NAME: &str = "data/data.db";
+
+#[derive(Debug, PartialEq)]
+pub enum Source {
+    Chat,
+    Web,
+}
 
 #[derive(Debug)]
 pub enum Command {
@@ -87,6 +94,7 @@ pub enum Command {
         user: String,
         second_user: Option<String>,
         team: Option<u8>,
+        source: Source,
         resp: Responder<AddResult>,
     },
     ConfirmUser {
@@ -97,17 +105,23 @@ pub enum Command {
     RemoveFromQueue {
         channel: String,
         user: String,
+        source: Source,
         resp: Responder<DeletionResult>,
     },
     MoveToOtherTeam {
         channel: String,
         user: String,
         team: u8,
+        source: Source,
         resp: Responder<MoveResult>,
     },
     ShowQueue {
         channel: String,
         resp: Responder<Queue>,
+    },
+    SwitchQueueStatus {
+        channel: String,
+        resp: Responder<Result<bool>>,
     },
 }
 
@@ -278,8 +292,9 @@ impl StateManager {
                 user,
                 second_user,
                 team,
+                source,
                 resp,
-            } => match self.add_to_queue(&channel, user.clone(), second_user, team) {
+            } => match self.add_to_queue(&channel, user.clone(), second_user, team, source) {
                 Ok(res) => resp.send(res).unwrap_or_default(),
                 Err(e) => {
                     error!("Could not add user(s) {user} {channel}: {e}");
@@ -295,7 +310,12 @@ impl StateManager {
                     let _ = resp.send(ConfirmResult::GeneralError);
                 }
             },
-            RemoveFromQueue { channel, user, resp } => match self.delete_from_queue(&channel, &user) {
+            RemoveFromQueue {
+                channel,
+                user,
+                source,
+                resp,
+            } => match self.delete_from_queue(&channel, &user, source) {
                 Ok(res) => resp.send(res).unwrap_or_default(),
                 Err(e) => {
                     error!("Could not delete user {user} {channel}: {e}");
@@ -306,8 +326,9 @@ impl StateManager {
                 channel,
                 user,
                 team,
+                source,
                 resp,
-            } => match self.move_to_other_team(&channel, &user, team) {
+            } => match self.move_to_other_team(&channel, &user, team, source) {
                 Ok(res) => resp.send(res).unwrap_or_default(),
                 Err(e) => {
                     error!("Could not move user {user} {channel}: {e}");
@@ -324,6 +345,9 @@ impl StateManager {
                     let _ = resp.send(Queue::default());
                 }
             },
+            SwitchQueueStatus { channel, resp } => {
+                resp.send(self.switch_queue(&channel)).unwrap_or_default();
+            }
         }
     }
     fn create_queue(&self, channel: &str, teams: u8, per_team: u8) -> Result<()> {
@@ -332,8 +356,8 @@ impl StateManager {
         let teams_vec = (0..teams).map(|_| Team::default()).collect::<Vec<_>>();
         let json = serde_json::to_string(&teams_vec)?;
         if let Err(e) = conn.execute(
-            "INSERT INTO queue VALUES (?1, ?2, ?3, $4) ON CONFLICT(channel) DO UPDATE SET no_teams=?2, team_size=?3, teams=$4",
-            params![channel, teams, per_team, json],
+            "INSERT INTO queue VALUES (?1, ?2, ?3, $4, $5) ON CONFLICT(channel) DO UPDATE SET no_teams=?2, team_size=?3, teams=$4, active=$5",
+            params![channel, teams, per_team, json, true],
         ) {
             bail!("Db error when creating queue: {}", e);
         };
@@ -341,6 +365,7 @@ impl StateManager {
             size: teams,
             team_size: per_team,
             teams: teams_vec,
+            active: true,
         };
         self.sender.send((q, channel.to_string())).ok();
         Ok(())
@@ -350,7 +375,7 @@ impl StateManager {
         info!("Getting queue for channel {channel}");
         let conn = Connection::open(DB_NAME)?;
         conn.query_row_and_then(
-            "SELECT no_teams, team_size, teams FROM queue WHERE channel = ?1",
+            "SELECT no_teams, team_size, teams, active FROM queue WHERE channel = ?1",
             [channel],
             |row| {
                 let json: String = row.get(2)?;
@@ -358,6 +383,7 @@ impl StateManager {
                 Ok(Queue {
                     size: row.get(0)?,
                     team_size: row.get(1)?,
+                    active: row.get(3)?,
                     teams,
                 })
             },
@@ -368,8 +394,8 @@ impl StateManager {
         let conn = Connection::open(DB_NAME)?;
         let json = serde_json::to_string(&queue.teams)?;
         if let Err(e) = conn.execute(
-            "UPDATE queue SET teams = json(?2) WHERE channel = ?1",
-            params![channel, json],
+            "UPDATE queue SET teams = json(?2), active=?3 WHERE channel = ?1",
+            params![channel, json, queue.active],
         ) {
             bail!("Db error when {operation} user to channel {channel}: {e}");
         };
@@ -383,9 +409,14 @@ impl StateManager {
         user: String,
         second_user: Option<String>,
         pref_team: Option<u8>,
+        source: Source,
     ) -> Result<AddResult> {
         info!("Adding {user} to channel {channel}");
         let mut queue = Self::get_queue(channel)?;
+        if source == Source::Chat && !queue.active {
+            return Ok(AddResult::QueueFrozen);
+        }
+
         let mut users = 2u8;
         let second_user = second_user.unwrap_or_else(|| {
             users = 1;
@@ -462,9 +493,12 @@ impl StateManager {
         }
     }
 
-    fn move_to_other_team(&self, channel: &str, user: &str, desired_team: u8) -> Result<MoveResult> {
+    fn move_to_other_team(&self, channel: &str, user: &str, desired_team: u8, source: Source) -> Result<MoveResult> {
         info!("Moving {user} to team {desired_team} in channel {channel}");
         let mut queue = Self::get_queue(channel)?;
+        if source == Source::Chat && !queue.active {
+            return Ok(MoveResult::QueueFrozen);
+        }
         if desired_team as usize >= queue.teams.len() {
             return Ok(MoveResult::InvalidTeam);
         }
@@ -496,9 +530,12 @@ impl StateManager {
         }
     }
 
-    fn delete_from_queue(&self, channel: &str, user: &str) -> Result<DeletionResult> {
+    fn delete_from_queue(&self, channel: &str, user: &str, source: Source) -> Result<DeletionResult> {
         info!("Deleting {user} in channel {channel}");
         let mut queue = Self::get_queue(channel)?;
+        if source == Source::Chat && !queue.active {
+            return Ok(DeletionResult::QueueFrozen);
+        }
         let mut found = false;
         for team in &mut queue.teams {
             for (idx, member) in team.members.iter().enumerate() {
@@ -516,6 +553,15 @@ impl StateManager {
         } else {
             Ok(DeletionResult::NotFound)
         }
+    }
+
+    fn switch_queue(&self, channel: &str) -> Result<bool> {
+        info!("Freezing/unfreezing queue for channel {channel}");
+        let mut queue = Self::get_queue(channel)?;
+        let result = !queue.active;
+        queue.active = result;
+        self.update_queue(channel, queue, "freezing/unfreezing")?;
+        Ok(result)
     }
 
     fn increment_pyramid_count(channel: &str, user: &str) -> Result<i32> {
@@ -699,7 +745,8 @@ fn initialize_db() -> Result<()> {
             channel TEXT PRIMARY KEY,
             no_teams INTEGER NOT NULL,
             team_size INTEGER NOT NULL,
-            teams TEXT NOT NULL
+            teams TEXT NOT NULL,
+            active BOOLEAN NOT NULL
         )",
         (),
     )

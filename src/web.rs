@@ -1,4 +1,4 @@
-use crate::state_manager::Command;
+use crate::state_manager::{Command, Source};
 use crate::teams::{AddResult, DeletionResult, Member, MoveResult, Queue, Status, Team};
 use async_stream::stream;
 use axum::extract::State;
@@ -11,7 +11,7 @@ use axum::{
     routing::{get, post},
 };
 use futures_util::Stream;
-use log::info;
+use log::{error, info};
 use minijinja::{Environment, context, path_loader};
 use serde::Deserialize;
 use std::convert::Infallible;
@@ -39,7 +39,7 @@ pub async fn create_webserver(sender: Sender<Command>, broad_send: BroadcastSend
 
         let app = Router::new()
             .route("/", get(main_handler))
-            .route("/channel/{channel}", get(queue_handler))
+            .route("/channel/{channel}", get(queue_handler).patch(switch_queue))
             .route("/channel/{channel}/sse", get(sse_handler))
             .route("/channel/{channel}/queue", get(queue_fragment).patch(move_to_queue))
             .route(
@@ -78,7 +78,7 @@ async fn sse_handler(
                     .get_template("queue.html")
                     .unwrap();
                 info!("Sending update");
-                let msg = template.render(context! {queue => queue, channel => channel}).unwrap();
+                let msg = template.render(context! {queue => queue, channel => channel}).unwrap().replace("\n", "").replace("\r", "");
                 yield Ok(SseEvent::default().data::<String>(msg))
             }
 
@@ -185,7 +185,7 @@ async fn create_queue(
         .engine
         .get_template("queue.html")
         .unwrap()
-        .render(context! {queue => queue, channel => input.channel});
+        .render(context! {queue => queue, channel => input.channel, active_queue => true});
     Ok(Html(template.unwrap()))
 }
 
@@ -209,6 +209,7 @@ async fn add_to_queue(
             user: input.user.clone(),
             second_user: None,
             team: Some(team_num as u8),
+            source: Source::Web,
             resp: tx,
         })
         .await;
@@ -230,6 +231,7 @@ async fn add_to_queue(
             return Err((StatusCode::INTERNAL_SERVER_ERROR, Html(template.unwrap())));
         }
         AddResult::Success(_) => {}
+        AddResult::QueueFrozen => {}
     };
 
     let (tx, rx) = oneshot::channel();
@@ -259,6 +261,7 @@ async fn delete_from_queue(
         .send(Command::RemoveFromQueue {
             channel: channel.clone(),
             user: user.clone(),
+            source: Source::Web,
             resp: tx,
         })
         .await;
@@ -280,6 +283,7 @@ async fn delete_from_queue(
             return Err((StatusCode::CONFLICT, Html(template.unwrap())));
         }
         DeletionResult::Success => {}
+        _ => {}
     };
 
     let (tx, rx) = oneshot::channel();
@@ -318,6 +322,7 @@ async fn move_to_queue(
             channel: channel.clone(),
             user: input.user.clone(),
             team: team as u8,
+            source: Source::Web,
             resp: tx,
         })
         .await;
@@ -345,6 +350,7 @@ async fn move_to_queue(
             let template = err_template.render(context! {act => true, msg => "Error en el servidor"});
             return Err((StatusCode::INTERNAL_SERVER_ERROR, Html(template.unwrap())));
         }
+        MoveResult::QueueFrozen => {}
     };
 
     let (tx, rx) = oneshot::channel();
@@ -363,4 +369,37 @@ async fn move_to_queue(
         .unwrap()
         .render(context! {queue => queue, channel => channel});
     Ok(Html(template.unwrap()))
+}
+
+async fn switch_queue(
+    extract::Path(channel): extract::Path<String>,
+    State(state): State<AppState>,
+) -> Result<Html<String>, (StatusCode, Html<String>)> {
+    info!("Switching queue status for channel: {}", channel);
+    let (tx, rx) = oneshot::channel();
+    let _ = state
+        .db
+        .send(Command::SwitchQueueStatus {
+            channel: channel.to_string(),
+            resp: tx,
+        })
+        .await;
+
+    match rx.await.unwrap() {
+        Ok(r) => {
+            info!("Returning the opposite which is {r}");
+            let template = state
+                .engine
+                .get_template("freeze.html")
+                .unwrap()
+                .render(context! {channel => channel, active_queue => r});
+            Ok(Html(template.unwrap()))
+        }
+        Err(e) => {
+            error!("Error when switching queue for channel {channel}: {e}");
+            let err_template = state.engine.get_template("error.html").unwrap();
+            let template = err_template.render(context! {act => true, msg => "Equipo invalido"});
+            Err((StatusCode::CONFLICT, Html(template.unwrap())))
+        }
+    }
 }

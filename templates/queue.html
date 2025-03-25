@@ -1,4 +1,6 @@
 <div id="queue">
+    {% set active_queue = queue.active %}
+    {% include "freeze.html" %}
     <div class="grid">
         {% set team_size = queue.team_size %}
         {% for team in queue.teams %}

@@ -9,6 +9,7 @@ pub enum AddResult {
     Success(usize),
     AlreadyInQueue,
     NoSpace,
+    QueueFrozen,
     GeneralError,
 }
 
@@ -26,6 +27,7 @@ pub enum MoveResult {
     NoSpace,
     InvalidTeam,
     AlreadyInTeam,
+    QueueFrozen,
     GeneralError,
 }
 
@@ -33,6 +35,7 @@ pub enum MoveResult {
 pub enum DeletionResult {
     Success,
     NotFound,
+    QueueFrozen,
     GeneralError,
 }
 
@@ -57,6 +60,7 @@ pub struct Team {
 pub struct Queue {
     pub size: u8,
     pub team_size: u8,
+    pub active: bool,
     pub teams: Vec<Team>,
 }
 

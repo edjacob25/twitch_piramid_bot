@@ -1,0 +1,12 @@
+<form
+    hx-patch="/channel/{{ channel }}"
+    hx-target-5*="#error_dialog"
+    hx-target-409="#error_dialog"
+    hx-swap="outerHTML"
+>
+    {% if active_queue %}
+        <input type="submit" value="Congelar" />
+    {% else %}
+        <input type="submit" value="Descongelar" class="outline" />
+    {% endif %}
+</form>
