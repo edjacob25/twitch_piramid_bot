@@ -1,13 +1,15 @@
 <div id="queue">
-    <div class=grid>
-    {% set team_size = queue.team_size %}
-    {% for team in queue.teams %}
-        {% set team_number = loop.index0 %}
-        {% include "team.html" %}
-        {% if loop.index % 5 == 0 %}
-            </div>
-            <div class="grid">
-        {% endif %}
-    {% endfor %}
+    <div class="grid">
+        {% set team_size = queue.team_size %}
+        {% for team in queue.teams %}
+            {% set team_number = loop.index0 %}
+            {% include "team.html" %}
+            {# prettier-ignore-start #}
+            {% if loop.index % 5 == 0 %}
+                </div>
+                <div class="grid">
+            {% endif %}
+            {# prettier-ignore-end #}
+        {% endfor %}
     </div>
 </div>
