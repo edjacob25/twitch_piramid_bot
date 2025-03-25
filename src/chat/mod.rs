@@ -21,7 +21,7 @@ use twitch_irc::login::RefreshingLoginCredentials;
 use twitch_irc::message::{PrivmsgMessage as ChatMessage, ReplyToMessage, ServerMessage};
 use twitch_irc::transport::websocket::SecureWSTransport;
 
-pub mod pyramid_action;
+mod pyramid_action;
 
 type TwitchClient = TwitchIRCClient<SecureWSTransport, RefreshingLoginCredentials<CustomTokenStorage>>;
 type Limiter = RateLimiter<String, DefaultKeyedStateStore<String>, DefaultClock>;

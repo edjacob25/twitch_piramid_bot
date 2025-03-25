@@ -18,7 +18,7 @@ use tokio_tungstenite::tungstenite::error::Error as WsError;
 use twitch_irc::login::{LoginCredentials, RefreshingLoginCredentials};
 use twitch_ws::*;
 
-pub mod event_data;
+mod event_data;
 pub mod twitch_ws;
 
 type Credentials = RefreshingLoginCredentials<CustomTokenStorage>;
