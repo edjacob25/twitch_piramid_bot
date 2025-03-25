@@ -1,14 +1,14 @@
+use crate::bot_action::BotAction;
 use crate::bot_config::{BotConfig, ChannelConfig};
 use crate::bot_token_storage::CustomTokenStorage;
-use crate::chat_action::ChatAction;
-use crate::pyramid_action::PyramidAction;
-use crate::state_manager::{Command, Source};
+use crate::state::{Command, Source};
 use anyhow::{Result, bail};
 use governor::Quota;
 use governor::clock::DefaultClock;
 use governor::state::RateLimiter;
 use governor::state::keyed::DefaultKeyedStateStore;
 use log::{debug, info, warn};
+use pyramid_action::PyramidAction;
 use std::collections::HashMap;
 use std::num::NonZeroU32;
 use std::sync::Arc;
@@ -20,6 +20,8 @@ use twitch_irc::client::TwitchIRCClient;
 use twitch_irc::login::RefreshingLoginCredentials;
 use twitch_irc::message::{PrivmsgMessage as ChatMessage, ReplyToMessage, ServerMessage};
 use twitch_irc::transport::websocket::SecureWSTransport;
+
+pub mod pyramid_action;
 
 type TwitchClient = TwitchIRCClient<SecureWSTransport, RefreshingLoginCredentials<CustomTokenStorage>>;
 type Limiter = RateLimiter<String, DefaultKeyedStateStore<String>, DefaultClock>;
@@ -620,32 +622,32 @@ impl ChatLoop {
 
                 for action in &actions {
                     match action {
-                        ChatAction::RespondSomething => {
+                        BotAction::RespondSomething => {
                             self.respond_something(&msg).await;
                         }
-                        ChatAction::PyramidCounting => {
+                        BotAction::PyramidCounting => {
                             self.do_pyramid_counting(&msg).await;
                         }
-                        ChatAction::PyramidInterference => {
+                        BotAction::PyramidInterference => {
                             self.do_pyramid_interference(&msg).await;
                         }
-                        ChatAction::AutoSO => {
+                        BotAction::AutoSO => {
                             self.do_auto_so(&msg).await;
                         }
-                        ChatAction::CountBits => {
+                        BotAction::CountBits => {
                             self.count_bits(&msg).await;
                         }
-                        ChatAction::Queue => {
+                        BotAction::Queue => {
                             self.handle_queue(&msg).await;
                         }
-                        ChatAction::GiveSO => {}
+                        BotAction::GiveSO => {}
                     }
                 }
             }
             ServerMessage::UserNotice(msg) => {
                 let channel_conf = self.channel_configs.get(&msg.channel_login).unwrap();
 
-                if !channel_conf.permitted_actions.contains(&ChatAction::GiveSO) {
+                if !channel_conf.permitted_actions.contains(&BotAction::GiveSO) {
                     return;
                 }
                 if msg.event_id != "raid" {

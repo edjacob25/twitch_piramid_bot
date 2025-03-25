@@ -1,4 +1,4 @@
-use crate::twitch_ws::{Condition, Transport};
+use super::twitch_ws::{Condition, Transport};
 use futures_util::stream::{SplitSink, SplitStream};
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpStream;

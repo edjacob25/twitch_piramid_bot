@@ -1,9 +1,8 @@
 use crate::bot_config::{BotConfig, Ntfy};
 use crate::bot_token_storage::CustomTokenStorage;
-use crate::event_data::*;
-use crate::state_manager::Command;
-use crate::twitch_ws::*;
+use crate::state::Command;
 use anyhow::{Result, anyhow, bail};
+use event_data::*;
 use futures_util::{SinkExt, StreamExt};
 use log::{debug, error, info, warn};
 use reqwest::{Client, StatusCode};
@@ -17,6 +16,10 @@ use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::error::Error as WsError;
 use twitch_irc::login::{LoginCredentials, RefreshingLoginCredentials};
+use twitch_ws::*;
+
+pub mod event_data;
+pub mod twitch_ws;
 
 type Credentials = RefreshingLoginCredentials<CustomTokenStorage>;
 

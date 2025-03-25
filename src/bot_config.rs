@@ -1,4 +1,4 @@
-use crate::chat_action::ChatAction;
+use crate::bot_action::BotAction;
 use regex::Regex;
 use serde::Deserialize;
 use std::collections::HashSet;
@@ -16,7 +16,7 @@ pub struct BotConfig {
 #[derive(Debug, Deserialize, Clone)]
 pub struct ChannelConfig {
     pub channel_name: String,
-    pub permitted_actions: HashSet<ChatAction>,
+    pub permitted_actions: HashSet<BotAction>,
     pub auto_so_channels: Option<HashSet<String>>,
     pub harder_pyramids: Option<HashSet<String>>,
     pub easier_pyramids: Option<HashSet<String>>,

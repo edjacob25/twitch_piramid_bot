@@ -1,8 +1,8 @@
 use crate::bot_config::BotConfig;
 use crate::bot_token_storage::CustomTokenStorage;
+use crate::events::twitch_ws::Event;
 use crate::teams::Status::{Confirmed, Unconfirmed};
 use crate::teams::{AddResult, ConfirmResult, DeletionResult, Member, MoveResult, Queue, Team};
-use crate::twitch_ws::Event;
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Local, Utc};
 use log::{debug, error, info};

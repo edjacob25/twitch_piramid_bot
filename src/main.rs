@@ -14,9 +14,9 @@ use twitch_irc::login::{
 };
 use twitch_piramid_bot::bot_config::BotConfig;
 use twitch_piramid_bot::bot_token_storage::CustomTokenStorage;
-use twitch_piramid_bot::chat_loop::message_loop;
-use twitch_piramid_bot::event_loop::create_event_loop;
-use twitch_piramid_bot::state_manager::create_state_manager;
+use twitch_piramid_bot::chat::message_loop;
+use twitch_piramid_bot::events::create_event_loop;
+use twitch_piramid_bot::state::create_state_manager;
 use twitch_piramid_bot::web::create_webserver;
 
 #[tokio::main]
