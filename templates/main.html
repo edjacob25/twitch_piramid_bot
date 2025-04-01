@@ -31,6 +31,21 @@
         </label>
         <input type="submit" value="Cambiar tamaño" />
     </form>
+    <div class="grid">
+        <button hx-post="/channel/{{ channel }}/queue" hx-swap="none">
+            Agregar equipo
+        </button>
+        <button
+            hx-delete="/channel/{{ channel }}/queue"
+            hx-target="#res"
+            hx-target-error="#error_dialog"
+            hx-swap="outerHTML"
+        >
+            Borrar equipo
+        </button>
+    </div>
+    <div id="res" style="display: none"></div>
+    <br />
     <div sse-connect="/channel/{{ channel }}/sse" sse-swap="message">
         {% include "queue.html" %}
     </div>

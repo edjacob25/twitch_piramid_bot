@@ -1,4 +1,4 @@
-use super::data::{AddResult, ConfirmResult, DeletionResult, MoveResult, Queue};
+use super::data::*;
 use super::{Responder, Source};
 use crate::events::twitch_ws::Event;
 
@@ -95,5 +95,12 @@ pub enum Command {
     SwitchQueueStatus {
         channel: String,
         resp: Responder<anyhow::Result<bool>>,
+    },
+    AddTeam {
+        channel: String,
+    },
+    RemoveTeam {
+        channel: String,
+        resp: Responder<TeamDeletionResult>,
     },
 }

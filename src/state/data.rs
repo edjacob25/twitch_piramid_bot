@@ -39,6 +39,13 @@ pub enum DeletionResult {
     GeneralError,
 }
 
+#[derive(Debug)]
+pub enum TeamDeletionResult {
+    Success,
+    NotEnoughSpaces,
+    GeneralError,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Status {
     Confirmed,

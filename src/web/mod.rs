@@ -1,6 +1,6 @@
 use crate::state::Source;
 use crate::state::command::Command;
-use crate::state::data::{AddResult, DeletionResult, Member, MoveResult, Queue, Status, Team};
+use crate::state::data::*;
 use async_stream::stream;
 use axum::extract::State;
 use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
@@ -42,7 +42,13 @@ pub async fn create_webserver(sender: Sender<Command>, broad_send: BroadcastSend
             .route("/", get(main_handler))
             .route("/channel/{channel}", get(queue_handler).patch(switch_queue))
             .route("/channel/{channel}/sse", get(sse_handler))
-            .route("/channel/{channel}/queue", get(queue_fragment).patch(move_to_queue))
+            .route(
+                "/channel/{channel}/queue",
+                get(queue_fragment)
+                    .post(add_team)
+                    .patch(move_to_queue)
+                    .delete(remove_team),
+            )
             .route(
                 "/channel/{channel}/queue/{team_num}",
                 get(team_fragment).post(add_to_queue),
@@ -400,6 +406,52 @@ async fn switch_queue(
             error!("Error when switching queue for channel {channel}: {e}");
             let err_template = state.engine.get_template("error.html").unwrap();
             let template = err_template.render(context! {act => true, msg => "Equipo invalido"});
+            Err((StatusCode::CONFLICT, Html(template.unwrap())))
+        }
+    }
+}
+
+async fn add_team(
+    extract::Path(channel): extract::Path<String>,
+    State(state): State<AppState>,
+) -> Result<String, (StatusCode, Html<String>)> {
+    info!("Add team to channel: {}", channel);
+    let _ = state
+        .db
+        .send(Command::AddTeam {
+            channel: channel.to_string(),
+        })
+        .await;
+
+    Ok("ok".to_string())
+}
+
+async fn remove_team(
+    extract::Path(channel): extract::Path<String>,
+    State(state): State<AppState>,
+) -> Result<Html<String>, (StatusCode, Html<String>)> {
+    info!("Switching queue status for channel: {}", channel);
+    let (tx, rx) = oneshot::channel();
+    let _ = state
+        .db
+        .send(Command::RemoveTeam {
+            channel: channel.to_string(),
+            resp: tx,
+        })
+        .await;
+
+    match rx.await.unwrap() {
+        TeamDeletionResult::Success => Ok(Html("<div id='res' style='display: none'></div>".to_string())),
+        TeamDeletionResult::NotEnoughSpaces => {
+            error!("Error when deleting ream from queue for channel {channel}");
+            let err_template = state.engine.get_template("error.html").unwrap();
+            let template = err_template.render(context! {act => true, msg => "No hay espacio para borrar equipos"});
+            Err((StatusCode::CONFLICT, Html(template.unwrap())))
+        }
+        TeamDeletionResult::GeneralError => {
+            error!("Error when deleting ream from queue for channel {channel}");
+            let err_template = state.engine.get_template("error.html").unwrap();
+            let template = err_template.render(context! {act => true, msg => "Error borrando un equipo"});
             Err((StatusCode::CONFLICT, Html(template.unwrap())))
         }
     }

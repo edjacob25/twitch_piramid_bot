@@ -256,6 +256,18 @@ impl StateManager {
             SwitchQueueStatus { channel, resp } => {
                 resp.send(self.switch_queue(&channel)).unwrap_or_default();
             }
+            AddTeam { channel } => {
+                if let Err(e) = self.add_team(&channel) {
+                    error!("Could add any team: {e}");
+                }
+            }
+            RemoveTeam { channel, resp } => match self.remove_team(&channel) {
+                Ok(res) => resp.send(res).unwrap_or_default(),
+                Err(e) => {
+                    error!("Could delete any team: {e}");
+                    let _ = resp.send(TeamDeletionResult::GeneralError);
+                }
+            },
         }
     }
 

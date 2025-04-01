@@ -1,12 +1,12 @@
 use super::data::Status::{Confirmed, Unconfirmed};
-use super::data::{AddResult, ConfirmResult, DeletionResult, Member, MoveResult, Queue, Team};
+use super::data::*;
 use super::{DB_NAME, Source, StateManager};
-use anyhow::bail;
+use anyhow::{Context, Result, bail};
 use log::info;
 use rusqlite::{Connection, params};
 
 impl StateManager {
-    pub fn create_queue(&self, channel: &str, teams: u8, per_team: u8) -> anyhow::Result<()> {
+    pub fn create_queue(&self, channel: &str, teams: u8, per_team: u8) -> Result<()> {
         info!("Creating queue for channel {channel} with {teams} teams and {per_team} spaces per team");
         let conn = Connection::open(DB_NAME)?;
         let teams_vec = (0..teams).map(|_| Team::default()).collect::<Vec<_>>();
@@ -27,7 +27,7 @@ impl StateManager {
         Ok(())
     }
 
-    pub fn get_queue(channel: &str) -> anyhow::Result<Queue> {
+    pub fn get_queue(channel: &str) -> Result<Queue> {
         info!("Getting queue for channel {channel}");
         let conn = Connection::open(DB_NAME)?;
         conn.query_row_and_then(
@@ -46,7 +46,7 @@ impl StateManager {
         )
     }
 
-    fn update_queue(&self, channel: &str, queue: Queue, operation: &str) -> anyhow::Result<()> {
+    fn update_queue(&self, channel: &str, queue: Queue, operation: &str) -> Result<()> {
         let conn = Connection::open(DB_NAME)?;
         let json = serde_json::to_string(&queue.teams)?;
         if let Err(e) = conn.execute(
@@ -66,7 +66,7 @@ impl StateManager {
         second_user: Option<String>,
         pref_team: Option<u8>,
         source: Source,
-    ) -> anyhow::Result<AddResult> {
+    ) -> Result<AddResult> {
         info!("Adding {user} to channel {channel}");
         let mut queue = Self::get_queue(channel)?;
         if source == Source::Chat && !queue.active {
@@ -126,7 +126,7 @@ impl StateManager {
         }
     }
 
-    pub fn confirm_user(&self, channel: &str, user: &str) -> anyhow::Result<ConfirmResult> {
+    pub fn confirm_user(&self, channel: &str, user: &str) -> Result<ConfirmResult> {
         info!("Confirming {user} in channel {channel}");
         let mut queue = Self::get_queue(channel)?;
         let mut found = false;
@@ -149,22 +149,16 @@ impl StateManager {
         }
     }
 
-    pub fn move_to_other_team(
-        &self,
-        channel: &str,
-        user: &str,
-        desired_team: u8,
-        source: Source,
-    ) -> anyhow::Result<MoveResult> {
-        info!("Moving {user} to team {desired_team} in channel {channel}");
+    pub fn move_to_other_team(&self, channel: &str, user: &str, desired_pos: u8, source: Source) -> Result<MoveResult> {
+        info!("Moving {user} to team {desired_pos} in channel {channel}");
         let mut queue = Self::get_queue(channel)?;
         if source == Source::Chat && !queue.active {
             return Ok(MoveResult::QueueFrozen);
         }
-        if desired_team as usize >= queue.teams.len() {
+        if desired_pos as usize >= queue.teams.len() {
             return Ok(MoveResult::InvalidTeam);
         }
-        let available_space = queue.teams[desired_team as usize].members.len() < queue.team_size as usize;
+        let available_space = queue.teams[desired_pos as usize].members.len() < queue.team_size as usize;
         if !available_space {
             return Ok(MoveResult::NoSpace);
         }
@@ -179,11 +173,11 @@ impl StateManager {
         }
 
         if let Some(final_idx) = final_idx {
-            if final_idx.0 == desired_team as usize {
+            if final_idx.0 == desired_pos as usize {
                 return Ok(MoveResult::AlreadyInTeam);
             }
             let p = queue.teams[final_idx.0].members.remove(final_idx.1);
-            queue.teams[desired_team as usize].members.push(p);
+            queue.teams[desired_pos as usize].members.push(p);
 
             self.update_queue(channel, queue, "moving")?;
             Ok(MoveResult::Success)
@@ -192,7 +186,7 @@ impl StateManager {
         }
     }
 
-    pub fn delete_from_queue(&self, channel: &str, user: &str, source: Source) -> anyhow::Result<DeletionResult> {
+    pub fn delete_from_queue(&self, channel: &str, user: &str, source: Source) -> Result<DeletionResult> {
         info!("Deleting {user} in channel {channel}");
         let mut queue = Self::get_queue(channel)?;
         if source == Source::Chat && !queue.active {
@@ -217,12 +211,106 @@ impl StateManager {
         }
     }
 
-    pub fn switch_queue(&self, channel: &str) -> anyhow::Result<bool> {
+    pub fn switch_queue(&self, channel: &str) -> Result<bool> {
         info!("Freezing/unfreezing queue for channel {channel}");
         let mut queue = Self::get_queue(channel)?;
         let result = !queue.active;
         queue.active = result;
         self.update_queue(channel, queue, "freezing/unfreezing")?;
         Ok(result)
+    }
+
+    pub fn add_team(&self, channel: &str) -> Result<()> {
+        let mut queue = Self::get_queue(channel)?;
+        queue.size += 1;
+        queue.teams.push(Team { members: vec![] });
+        self.update_queue(channel, queue, "adding")?;
+        Ok(())
+    }
+
+    pub fn remove_team(&self, channel: &str) -> Result<TeamDeletionResult> {
+        let mut queue = Self::get_queue(channel)?;
+        info!("{:?}", queue);
+        let empty = queue.teams.iter().rposition(|t| t.members.len() == 0);
+        if let Some(idx) = empty {
+            info!("Removing empty team in channel {channel}");
+            queue.teams.remove(idx);
+            queue.size -= 1;
+            self.update_queue(channel, queue, "removing an empty team")?;
+            return Ok(TeamDeletionResult::Success);
+        }
+        let empty_spaces = queue
+            .teams
+            .iter()
+            .map(|t| queue.team_size as usize - t.members.len())
+            .collect::<Vec<_>>();
+        let total_empty = empty_spaces.iter().sum::<usize>();
+        if total_empty < queue.team_size as usize {
+            info!("Could not remove the team, not enough spaces");
+            return Ok(TeamDeletionResult::NotEnoughSpaces);
+        }
+        let smallest_team_idx = empty_spaces
+            .iter()
+            .enumerate()
+            .max_by_key(|(_, val)| **val)
+            .map(|(idx, _)| idx)
+            .context("Could not find index of smallest team")?;
+        let mut smallest_team = queue.teams.remove(smallest_team_idx);
+        for team in &mut queue.teams {
+            while team.members.len() < queue.team_size as usize && smallest_team.members.len() > 0 {
+                let mem = smallest_team.members.pop().context("Could not find smallest team")?;
+                team.members.push(mem);
+            }
+        }
+        queue.size -= 1;
+        info!("{:?}", queue);
+        self.update_queue(channel, queue, "removing an empty team")?;
+        Ok(TeamDeletionResult::Success)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::bot_config::BotConfig;
+    use simplelog::{ColorChoice, CombinedLogger, ConfigBuilder, TermLogger, TerminalMode};
+    use std::sync::Arc;
+    use tokio::sync::{broadcast, mpsc};
+    // Note this useful idiom: importing names from outer (for mod tests) scope.
+    use super::*;
+
+    #[test]
+    fn test_delete() {
+        let logger_conf = ConfigBuilder::new()
+            .set_time_format_rfc3339()
+            .set_target_level(log::LevelFilter::Info)
+            .build();
+        CombinedLogger::init(vec![TermLogger::new(
+            log::LevelFilter::Info,
+            logger_conf.clone(),
+            TerminalMode::Mixed,
+            ColorChoice::Auto,
+        )])
+        .unwrap();
+        let (broadcast, _) = broadcast::channel(10);
+        let (_, rx) = mpsc::channel(32);
+        let manager = StateManager {
+            conf: Arc::new(BotConfig {
+                name: "".to_string(),
+                credentials_file: "".to_string(),
+                client_secret: "".to_string(),
+                client_id: "".to_string(),
+                channels: vec![],
+                ntfy: None,
+            }),
+
+            receiver: rx,
+            sender: broadcast,
+            streams_data: Default::default(),
+        };
+
+        let _res = manager.remove_team("jacobrr25");
+        // This assert would fire and test will fail.
+        // Please note, that private functions can be tested too!
+        assert_eq!(1, 1);
     }
 }
