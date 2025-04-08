@@ -77,18 +77,17 @@ async fn sse_handler(
     let mut rx = state.notifications.subscribe();
     let mut env = Environment::new();
     env.set_loader(path_loader("templates"));
-    info!("Starting sse");
+    info!("Starting sse for {channel}");
     Sse::new(stream! {
         while let Ok((queue, e_channel)) = rx.recv().await {
             if e_channel == channel{
                 let template = env
                     .get_template("queue.html")
                     .unwrap();
-                info!("Sending update");
+                info!("Sending update for channel {channel}");
                 let msg = template.render(context! {queue => queue, channel => channel}).unwrap().replace("\n", "").replace("\r", "");
                 yield Ok(SseEvent::default().data::<String>(msg))
             }
-
         }
     })
     .keep_alive(KeepAlive::default())
