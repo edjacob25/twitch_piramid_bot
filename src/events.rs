@@ -373,7 +373,7 @@ impl EventLoop {
                     MessageResponse::ConnectionSuccessful(_ids) if reconnecting => {
                         warn!("Actually closing the old connection");
                         let (mut old_w, old_r) = last_client.unwrap();
-                        let _ = old_w.close();
+                        let _ = old_w.close().await;
                         last_client = None;
                         drop(old_w);
                         drop(old_r);
@@ -386,7 +386,7 @@ impl EventLoop {
                     MessageResponse::Close => {
                         warn!("Resetting connection to base level");
                         address = "wss://eventsub.wss.twitch.tv/ws".to_string();
-                        let _ = ws_write.close();
+                        let _ = ws_write.close().await;
                         for current_subscription in &current_subscriptions {
                             warn!("Unregistering subscription {}", current_subscription);
                             if let Err(e) = self.unregister_events(current_subscription).await {

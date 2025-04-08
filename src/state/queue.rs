@@ -231,7 +231,7 @@ impl StateManager {
     pub fn remove_team(&self, channel: &str) -> Result<TeamDeletionResult> {
         let mut queue = Self::get_queue(channel)?;
         info!("{:?}", queue);
-        let empty = queue.teams.iter().rposition(|t| t.members.len() == 0);
+        let empty = queue.teams.iter().rposition(|t| t.members.is_empty());
         if let Some(idx) = empty {
             info!("Removing empty team in channel {channel}");
             queue.teams.remove(idx);
@@ -257,7 +257,7 @@ impl StateManager {
             .context("Could not find index of smallest team")?;
         let mut smallest_team = queue.teams.remove(smallest_team_idx);
         for team in &mut queue.teams {
-            while team.members.len() < queue.team_size as usize && smallest_team.members.len() > 0 {
+            while team.members.len() < queue.team_size as usize && !smallest_team.members.is_empty() {
                 let mem = smallest_team.members.pop().context("Could not find smallest team")?;
                 team.members.push(mem);
             }
