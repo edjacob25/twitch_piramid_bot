@@ -65,6 +65,10 @@ impl ChatLoop {
         .await;
     }
 
+    fn sanitize_username(user: &str) -> String {
+        user.replace('@', "").to_lowercase()
+    }
+
     fn parse_join_opts(msg: &str) -> (Option<String>, Option<u8>) {
         let split = msg.trim().split(' ').collect::<Vec<_>>();
         let len = split.len();
@@ -75,11 +79,11 @@ impl ChatLoop {
             if let Ok(num) = split[1].parse::<u8>() {
                 return (None, Some(num));
             }
-            return (Some(split[1].replace('@', "").to_string()), None);
+            return (Some(Self::sanitize_username(split[1])), None);
         }
 
         let preferred_team = split[2].parse::<u8>().ok();
-        (Some(split[1].replace('@', "").to_string()), preferred_team)
+        (Some(Self::sanitize_username(split[1])), preferred_team)
     }
 
     async fn join_queue(&self, user: String, channel: &str, msg: &str) {
@@ -233,7 +237,7 @@ impl ChatLoop {
         }
 
         let preferred_team = split[2].parse::<u8>()?;
-        Ok((preferred_team, Some(split[1].replace('@', "").to_string())))
+        Ok((preferred_team, Some(Self::sanitize_username(split[1]))))
     }
 
     async fn move_user(&self, channel: &str, user: String, msg: &str) {
