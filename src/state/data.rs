@@ -7,6 +7,7 @@ use std::str::FromStr;
 #[derive(Debug)]
 pub enum AddResult {
     Success(usize),
+    Alternative(usize),
     AlreadyInQueue,
     NoSpace,
     QueueFrozen,

@@ -93,17 +93,19 @@ impl StateManager {
         }
 
         let mut chosen_idx = None;
+        let pref_exists = pref_team.is_some();
         if let Some(preferred_team) = pref_team {
             let real_idx = preferred_team as usize;
             if real_idx < free_spaces.len() && free_spaces[real_idx] >= users {
                 chosen_idx = Some(real_idx);
             }
         }
-
+        let mut second_option = false;
         if chosen_idx.is_none() {
             for (idx, team_free_space) in free_spaces.iter().enumerate() {
                 if *team_free_space >= users {
                     chosen_idx = Some(idx);
+                    second_option = pref_exists;
                     break;
                 }
             }
@@ -120,7 +122,11 @@ impl StateManager {
                 });
             }
             self.update_queue(channel, queue, "Adding")?;
-            Ok(AddResult::Success(chosen_idx))
+            if second_option {
+                Ok(AddResult::Alternative(chosen_idx))
+            } else {
+                Ok(AddResult::Success(chosen_idx))
+            }
         } else {
             Ok(AddResult::NoSpace)
         }

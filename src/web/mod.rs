@@ -238,6 +238,7 @@ async fn add_to_queue(
         }
         AddResult::Success(_) => {}
         AddResult::QueueFrozen => {}
+        AddResult::Alternative(_) => {}
     };
 
     let (tx, rx) = oneshot::channel();

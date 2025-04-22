@@ -131,6 +131,16 @@ impl ChatLoop {
                 self.say_rate_limited(channel, "No se puede agregar. La lista esta congelada".to_string())
                     .await;
             }
+            Alternative(t) => {
+                self.say_rate_limited(
+                    channel,
+                    format!(
+                        "Equipo preferido lleno o inexistente. Anotado(s) en el equipo {}",
+                        t + 1
+                    ),
+                )
+                .await;
+            }
         }
     }
 
