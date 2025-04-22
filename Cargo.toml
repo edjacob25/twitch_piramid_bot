@@ -10,7 +10,7 @@ default-run = "twitch_piramid_bot"
 anyhow = "1.0"
 async-trait = "0.1"
 async-stream = "0.3"
-axum =  {  version = "0.8", features = ["macros"] }
+axum = { version = "0.8", features = ["macros"] }
 chrono = { version = "0.4", features = ["serde"] }
 config = { version = "0.15", features = ["toml"] }
 file-rotate = "0.8"
@@ -24,7 +24,7 @@ reqwest = { version = "0.12", features = [
   "json",
   "rustls-tls",
 ], default-features = false }
-rusqlite = { version = "0.34", features = ['bundled'] }
+rusqlite = { version = "0.35", features = ['bundled'] }
 rustls = "0.23.23"
 serde = "1.0"
 serde_json = "1.0"
