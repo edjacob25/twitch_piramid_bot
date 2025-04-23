@@ -19,6 +19,7 @@ impl ChatLoop {
             "!salir" => self.delete_user(channel, user).await,
             "!confirmar" => self.confirm_user(channel, user).await,
             "!equipos" => self.show_queue(channel).await,
+            "!ayuda" => self.say_help(channel).await,
             _ => {}
         }
     }
@@ -26,6 +27,11 @@ impl ChatLoop {
     fn check_admin(msg: &ChatMessage) -> bool {
         let badges = msg.badges.iter().map(|b| b.name.to_lowercase()).collect::<Vec<_>>();
         badges.iter().any(|x| x.eq("broadcaster") || x.eq("moderator"))
+    }
+
+    async fn say_help(&self, channel: &str) {
+        let msg = "Lo que esta entre llaves es opcional | !entrar [otro_usuario] [equipo_preferido] | !mover equipo_deseado | !salir | !confirmar | !equipos".to_string();
+        self.say_rate_limited(channel, msg).await;
     }
 
     fn parse_create_opts(msg: &str) -> Result<(u8, u8)> {
