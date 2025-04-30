@@ -236,7 +236,6 @@ impl StateManager {
 
     pub fn remove_team(&self, channel: &str) -> Result<TeamDeletionResult> {
         let mut queue = Self::get_queue(channel)?;
-        info!("{:?}", queue);
         let empty = queue.teams.iter().rposition(|t| t.members.is_empty());
         if let Some(idx) = empty {
             info!("Removing empty team in channel {channel}");

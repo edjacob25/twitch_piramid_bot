@@ -430,7 +430,7 @@ async fn remove_team(
     extract::Path(channel): extract::Path<String>,
     State(state): State<AppState>,
 ) -> Result<Html<String>, (StatusCode, Html<String>)> {
-    info!("Switching queue status for channel: {}", channel);
+    info!("Removing team for channel: {}", channel);
     let (tx, rx) = oneshot::channel();
     let _ = state
         .db

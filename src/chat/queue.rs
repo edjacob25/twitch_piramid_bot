@@ -121,7 +121,7 @@ impl ChatLoop {
             }
             AlreadyInQueue => {
                 let comp = if extra.is_some() {
-                    format!("{user} or {}", extra.unwrap())
+                    format!("{user} o {}", extra.unwrap())
                 } else {
                     user
                 };
