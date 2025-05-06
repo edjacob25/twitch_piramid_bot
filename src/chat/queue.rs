@@ -193,7 +193,7 @@ impl ChatLoop {
         let split = msg.trim().split(' ').collect::<Vec<_>>();
         let len = split.len();
         if len > 1 {
-            return Some(split[1].replace('@', "").to_string());
+            return Some(Self::sanitize_username(split[1]));
         }
         None
     }

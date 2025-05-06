@@ -207,12 +207,13 @@ async fn add_to_queue(
     extract::Form(input): extract::Form<AddInput>,
 ) -> Result<Html<String>, (StatusCode, Html<String>)> {
     info!("Adding to queue {} in channel {}", team_num, channel);
+    let user = input.user.replace('@', "").to_lowercase();
     let (tx, rx) = oneshot::channel();
     let _ = state
         .db
         .send(Command::AddToQueue {
             channel: channel.clone(),
-            user: input.user.clone(),
+            user,
             second_user: None,
             team: Some(team_num as u8),
             source: Source::Web,
