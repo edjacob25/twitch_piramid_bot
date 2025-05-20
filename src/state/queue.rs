@@ -137,12 +137,12 @@ impl StateManager {
         let mut queue = Self::get_queue(channel)?;
         let mut found = false;
         let mut idx = 0;
-        for team in &mut queue.teams {
+        'outer: for team in &mut queue.teams {
             for member in &mut team.members {
                 if member.name == user && member.status == Unconfirmed {
                     member.status = Confirmed;
                     found = true;
-                    break;
+                    break 'outer;
                 }
             }
             idx += 1;
