@@ -161,8 +161,8 @@ async fn team_fragment(
 #[allow(dead_code)]
 struct CreateInput {
     channel: String,
-    queue_size: u8,
-    team_size: u8,
+    queue_size: usize,
+    team_size: usize,
 }
 
 async fn create_queue(
@@ -215,7 +215,7 @@ async fn add_to_queue(
             channel: channel.clone(),
             user,
             second_user: None,
-            team: Some(team_num as u8),
+            team: Some(team_num),
             source: Source::Web,
             resp: tx,
         })
@@ -329,7 +329,7 @@ async fn move_to_queue(
         .send(Command::MoveToOtherTeam {
             channel: channel.clone(),
             user: input.user.clone(),
-            team: team as u8,
+            team,
             source: Source::Web,
             resp: tx,
         })

@@ -34,13 +34,13 @@ impl ChatLoop {
         self.say_rate_limited(channel, msg).await;
     }
 
-    fn parse_create_opts(msg: &str) -> Result<(u8, u8)> {
+    fn parse_create_opts(msg: &str) -> Result<(usize, usize)> {
         let split = msg.trim().split(' ').collect::<Vec<_>>();
         if split.len() < 3 {
             bail!("Invalid number of options {}", split.len());
         }
-        let num_teams = split[1].parse::<u8>()?;
-        let num_persons = split[2].parse::<u8>()?;
+        let num_teams = split[1].parse::<usize>()?;
+        let num_persons = split[2].parse::<usize>()?;
         Ok((num_teams, num_persons))
     }
 
@@ -75,8 +75,8 @@ impl ChatLoop {
         user.replace('@', "").to_lowercase()
     }
 
-    fn parse_join_opts(msg: &str) -> Result<(Option<String>, Option<u8>)> {
-        let mut iter = msg.trim().split_whitespace();
+    fn parse_join_opts(msg: &str) -> Result<(Option<String>, Option<usize>)> {
+        let mut iter = msg.split_whitespace();
         iter.next();
         let first_arg = match iter.next() {
             Some(v) => v,
@@ -84,13 +84,16 @@ impl ChatLoop {
         };
         match iter.next() {
             None => {
-                if let Ok(num) = first_arg.parse::<u8>() {
+                if let Ok(num) = first_arg.parse::<usize>() {
                     Ok((None, Some(num)))
                 } else {
                     Ok((Some(Self::sanitize_username(first_arg)), None))
                 }
             }
-            Some(team_num) => Ok((Some(Self::sanitize_username(first_arg)), Some(team_num.parse::<u8>()?))),
+            Some(team_num) => Ok((
+                Some(Self::sanitize_username(first_arg)),
+                Some(team_num.parse::<usize>()?),
+            )),
         }
     }
 
@@ -251,16 +254,16 @@ impl ChatLoop {
         }
     }
 
-    fn parse_move_opts(msg: &str) -> Result<(u8, Option<String>)> {
-        let mut iter = msg.trim().split_whitespace();
+    fn parse_move_opts(msg: &str) -> Result<(usize, Option<String>)> {
+        let mut iter = msg.split_whitespace();
         iter.next();
         let first_arg = match iter.next() {
             None => bail!("No team selected"),
             Some(v) => v,
         };
         match iter.next() {
-            None => Ok((first_arg.parse::<u8>()?, None)),
-            Some(v) => Ok((v.parse::<u8>()?, Some(Self::sanitize_username(first_arg)))),
+            None => Ok((first_arg.parse::<usize>()?, None)),
+            Some(v) => Ok((v.parse::<usize>()?, Some(Self::sanitize_username(first_arg)))),
         }
     }
 
@@ -325,7 +328,7 @@ impl ChatLoop {
     }
 
     fn parse_call_opts(msg: &str) -> Result<usize> {
-        let mut iter = msg.trim().split_whitespace();
+        let mut iter = msg.split_whitespace();
         iter.next();
         match iter.next() {
             None => bail!("No team selected"),

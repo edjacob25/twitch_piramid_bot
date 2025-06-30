@@ -66,8 +66,8 @@ pub struct Team {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Queue {
-    pub size: u8,
-    pub team_size: u8,
+    pub size: usize,
+    pub team_size: usize,
     pub active: bool,
     pub teams: Vec<Team>,
 }

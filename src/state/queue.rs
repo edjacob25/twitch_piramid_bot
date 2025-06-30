@@ -6,7 +6,7 @@ use log::info;
 use rusqlite::{Connection, params};
 
 impl StateManager {
-    pub fn create_queue(&self, channel: &str, teams: u8, per_team: u8) -> Result<()> {
+    pub fn create_queue(&self, channel: &str, teams: usize, per_team: usize) -> Result<()> {
         info!("Creating queue for channel {channel} with {teams} teams and {per_team} spaces per team");
         let conn = Connection::open(DB_NAME)?;
         let teams_vec = (0..teams).map(|_| Team::default()).collect::<Vec<_>>();
@@ -64,7 +64,7 @@ impl StateManager {
         channel: &str,
         user: String,
         second_user: Option<String>,
-        pref_team: Option<u8>,
+        pref_team: Option<usize>,
         source: Source,
     ) -> Result<AddResult> {
         info!("Adding {user} to channel {channel}");
@@ -73,7 +73,7 @@ impl StateManager {
             return Ok(AddResult::QueueFrozen);
         }
 
-        let mut users = 2u8;
+        let mut users = 2;
         let second_user = second_user.unwrap_or_else(|| {
             users = 1;
             String::new()
@@ -82,7 +82,7 @@ impl StateManager {
         let mut free_spaces = vec![];
         let mut already_found = false;
         for team in &queue.teams {
-            free_spaces.push(queue.team_size - team.members.len() as u8);
+            free_spaces.push(queue.team_size - team.members.len());
             let names = team.members.iter().map(|x| x.name.as_str()).collect::<Vec<_>>();
             if names.contains(&user.as_str()) || (users == 2 && names.contains(&second_user.as_str())) {
                 already_found = true;
@@ -95,7 +95,7 @@ impl StateManager {
         let mut chosen_idx = None;
         let pref_exists = pref_team.is_some();
         if let Some(preferred_team) = pref_team {
-            let real_idx = preferred_team as usize;
+            let real_idx = preferred_team;
             if real_idx < free_spaces.len() && free_spaces[real_idx] >= users {
                 chosen_idx = Some(real_idx);
             }
@@ -155,16 +155,22 @@ impl StateManager {
         }
     }
 
-    pub fn move_to_other_team(&self, channel: &str, user: &str, desired_pos: u8, source: Source) -> Result<MoveResult> {
+    pub fn move_to_other_team(
+        &self,
+        channel: &str,
+        user: &str,
+        desired_pos: usize,
+        source: Source,
+    ) -> Result<MoveResult> {
         info!("Moving {user} to team {desired_pos} in channel {channel}");
         let mut queue = Self::get_queue(channel)?;
         if source == Source::Chat && !queue.active {
             return Ok(MoveResult::QueueFrozen);
         }
-        if desired_pos as usize >= queue.teams.len() {
+        if desired_pos >= queue.teams.len() {
             return Ok(MoveResult::InvalidTeam);
         }
-        let available_space = queue.teams[desired_pos as usize].members.len() < queue.team_size as usize;
+        let available_space = queue.teams[desired_pos].members.len() < queue.team_size;
         if !available_space {
             return Ok(MoveResult::NoSpace);
         }
@@ -179,11 +185,11 @@ impl StateManager {
         }
 
         if let Some(final_idx) = final_idx {
-            if final_idx.0 == desired_pos as usize {
+            if final_idx.0 == desired_pos {
                 return Ok(MoveResult::AlreadyInTeam);
             }
             let p = queue.teams[final_idx.0].members.remove(final_idx.1);
-            queue.teams[desired_pos as usize].members.push(p);
+            queue.teams[desired_pos].members.push(p);
 
             self.update_queue(channel, queue, "moving")?;
             Ok(MoveResult::Success)
@@ -247,10 +253,10 @@ impl StateManager {
         let empty_spaces = queue
             .teams
             .iter()
-            .map(|t| queue.team_size as usize - t.members.len())
+            .map(|t| queue.team_size - t.members.len())
             .collect::<Vec<_>>();
         let total_empty = empty_spaces.iter().sum::<usize>();
-        if total_empty < queue.team_size as usize {
+        if total_empty < queue.team_size {
             info!("Could not remove the team, not enough spaces");
             return Ok(TeamDeletionResult::NotEnoughSpaces);
         }
@@ -262,7 +268,7 @@ impl StateManager {
             .context("Could not find index of smallest team")?;
         let mut smallest_team = queue.teams.remove(smallest_team_idx);
         for team in &mut queue.teams {
-            while team.members.len() < queue.team_size as usize && !smallest_team.members.is_empty() {
+            while team.members.len() < queue.team_size && !smallest_team.members.is_empty() {
                 let mem = smallest_team.members.pop().context("Could not find smallest team")?;
                 team.members.push(mem);
             }

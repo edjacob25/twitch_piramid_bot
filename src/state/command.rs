@@ -56,8 +56,8 @@ pub enum Command {
     },
     CreateQueue {
         channel: String,
-        teams: u8,
-        per_team: u8,
+        teams: usize,
+        per_team: usize,
     },
     ResetQueue {
         channel: String,
@@ -66,7 +66,7 @@ pub enum Command {
         channel: String,
         user: String,
         second_user: Option<String>,
-        team: Option<u8>,
+        team: Option<usize>,
         source: Source,
         resp: Responder<AddResult>,
     },
@@ -84,7 +84,7 @@ pub enum Command {
     MoveToOtherTeam {
         channel: String,
         user: String,
-        team: u8,
+        team: usize,
         source: Source,
         resp: Responder<MoveResult>,
     },
