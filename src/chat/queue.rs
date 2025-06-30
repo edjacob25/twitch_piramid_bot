@@ -75,25 +75,34 @@ impl ChatLoop {
         user.replace('@', "").to_lowercase()
     }
 
-    fn parse_join_opts(msg: &str) -> (Option<String>, Option<u8>) {
-        let split = msg.trim().split(' ').collect::<Vec<_>>();
-        let len = split.len();
-        if len == 1 {
-            return (None, None);
-        }
-        if len == 2 {
-            if let Ok(num) = split[1].parse::<u8>() {
-                return (None, Some(num));
+    fn parse_join_opts(msg: &str) -> Result<(Option<String>, Option<u8>)> {
+        let mut iter = msg.trim().split_whitespace();
+        iter.next();
+        let first_arg = match iter.next() {
+            Some(v) => v,
+            None => return Ok((None, None)),
+        };
+        match iter.next() {
+            None => {
+                if let Ok(num) = first_arg.parse::<u8>() {
+                    Ok((None, Some(num)))
+                } else {
+                    Ok((Some(Self::sanitize_username(first_arg)), None))
+                }
             }
-            return (Some(Self::sanitize_username(split[1])), None);
+            Some(team_num) => Ok((Some(Self::sanitize_username(first_arg)), Some(team_num.parse::<u8>()?))),
         }
-
-        let preferred_team = split[2].parse::<u8>().ok();
-        (Some(Self::sanitize_username(split[1])), preferred_team)
     }
 
     async fn join_queue(&self, user: String, channel: &str, msg: &str) {
-        let (extra, team) = Self::parse_join_opts(msg);
+        let (extra, team) = match Self::parse_join_opts(msg) {
+            Ok(v) => v,
+            Err(_) => {
+                self.say_rate_limited(channel, "Hubo un error con las opciones del comando".to_string())
+                    .await;
+                return;
+            }
+        };
         if let Some(t) = team {
             if t == 0 {
                 self.say_rate_limited(channel, "No se pudo anotar para el equipo 0".to_string())
@@ -243,17 +252,16 @@ impl ChatLoop {
     }
 
     fn parse_move_opts(msg: &str) -> Result<(u8, Option<String>)> {
-        let split = msg.trim().split(' ').collect::<Vec<_>>();
-        let len = split.len();
-        if len == 1 {
-            bail!("No team selected");
+        let mut iter = msg.trim().split_whitespace();
+        iter.next();
+        let first_arg = match iter.next() {
+            None => bail!("No team selected"),
+            Some(v) => v,
+        };
+        match iter.next() {
+            None => Ok((first_arg.parse::<u8>()?, None)),
+            Some(v) => Ok((v.parse::<u8>()?, Some(Self::sanitize_username(first_arg)))),
         }
-        if len == 2 {
-            return Ok((split[1].parse::<u8>()?, None));
-        }
-
-        let preferred_team = split[2].parse::<u8>()?;
-        Ok((preferred_team, Some(Self::sanitize_username(split[1]))))
     }
 
     async fn move_user(&self, channel: &str, user: String, msg: &str) {
@@ -317,12 +325,12 @@ impl ChatLoop {
     }
 
     fn parse_call_opts(msg: &str) -> Result<usize> {
-        let split = msg.trim().split(' ').collect::<Vec<_>>();
-        let len = split.len();
-        if len == 1 {
-            bail!("No team selected");
+        let mut iter = msg.trim().split_whitespace();
+        iter.next();
+        match iter.next() {
+            None => bail!("No team selected"),
+            Some(v) => Ok(v.parse::<usize>()?),
         }
-        Ok(split[1].parse::<usize>()?)
     }
 
     async fn call_team(&self, channel: &str, msg: &str) {
