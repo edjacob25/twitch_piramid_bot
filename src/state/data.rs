@@ -99,10 +99,15 @@ impl Display for Queue {
             write!(f, "No hay equipos")?;
             return Ok(());
         }
-
-        write!(f, "{} por equipo: | ", self.team_size)?;
+        if !self.active {
+            write!(f, "🧊 ")?;
+        }
+        write!(f, "{} por equipo ➤ | ", self.team_size)?;
         for team in &self.teams {
             write!(f, "{team} | ")?;
+        }
+        if !self.active {
+            write!(f, "🧊")?;
         }
         Ok(())
     }
