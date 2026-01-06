@@ -293,7 +293,7 @@ impl StateManager {
         let now: DateTime<Local> = Local::now();
         conn.execute(
             "INSERT INTO bits VALUES (?, ?, ?, ?, ?)",
-            (channel, now.to_rfc3339(), now.timestamp(), user, bits),
+            (channel, now.to_rfc3339(), now.timestamp(), user, bits as u32),
         )?;
         let _ = conn.close();
         Ok(())

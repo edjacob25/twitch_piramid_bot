@@ -8,6 +8,8 @@ use rusqlite::{Connection, params};
 impl StateManager {
     pub fn create_queue(&self, channel: &str, teams: usize, per_team: usize) -> Result<()> {
         info!("Creating queue for channel {channel} with {teams} teams and {per_team} spaces per team");
+        let teams = u32::try_from(teams).unwrap_or(u32::MAX);
+        let per_team = u32::try_from(per_team).unwrap_or(u32::MAX);
         let conn = Connection::open(DB_NAME)?;
         let teams_vec = (0..teams).map(|_| Team::default()).collect::<Vec<_>>();
         let json = serde_json::to_string(&teams_vec)?;
@@ -18,8 +20,8 @@ impl StateManager {
             bail!("Db error when creating queue: {}", e);
         };
         let q = Queue {
-            size: teams,
-            team_size: per_team,
+            size: teams as usize,
+            team_size: per_team as usize,
             teams: teams_vec,
             active: true,
         };
@@ -36,9 +38,11 @@ impl StateManager {
             |row| {
                 let json: String = row.get(2)?;
                 let teams: Vec<Team> = serde_json::from_str(&json)?;
+                let size: u32 = row.get(0)?;
+                let team_size: u32 = row.get(1)?;
                 Ok(Queue {
-                    size: row.get(0)?,
-                    team_size: row.get(1)?,
+                    size: size as usize,
+                    team_size: team_size as usize,
                     active: row.get(3)?,
                     teams,
                 })
