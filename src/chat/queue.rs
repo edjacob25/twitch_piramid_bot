@@ -106,12 +106,12 @@ impl ChatLoop {
                 return;
             }
         };
-        if let Some(t) = team {
-            if t == 0 {
-                self.say_rate_limited(channel, "No se pudo anotar para el equipo 0".to_string())
-                    .await;
-                return;
-            }
+        if let Some(t) = team
+            && t == 0
+        {
+            self.say_rate_limited(channel, "No se pudo anotar para el equipo 0".to_string())
+                .await;
+            return;
         }
         let team = team.map(|team| team - 1);
         let (tx, rx) = oneshot::channel();
@@ -132,8 +132,8 @@ impl ChatLoop {
                     .await;
             }
             AlreadyInQueue => {
-                let comp = if extra.is_some() {
-                    format!("{user} o {}", extra.unwrap())
+                let comp = if let Some(e) = extra {
+                    format!("{user} o {}", e)
                 } else {
                     user
                 };

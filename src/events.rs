@@ -289,14 +289,14 @@ impl EventLoop {
             };
             let mut events = vec!["stream.online", "stream.offline", "channel.update"];
 
-            if let Some(chanel) = channel_configs.get(name) {
-                if chanel.prediction_monitoring.unwrap_or(false) {
-                    events.extend([
-                        "channel.prediction.begin",
-                        "channel.prediction.progress",
-                        "channel.prediction.end",
-                    ]);
-                }
+            if let Some(chanel) = channel_configs.get(name)
+                && chanel.prediction_monitoring.unwrap_or(false)
+            {
+                events.extend([
+                    "channel.prediction.begin",
+                    "channel.prediction.progress",
+                    "channel.prediction.end",
+                ]);
             }
             for event in events {
                 event_data.event = event;

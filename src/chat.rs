@@ -197,12 +197,14 @@ impl ChatLoop {
                 info!("Pyramid growing");
                 *emote_count += 1;
 
-                if let Some(h) = config.harder_pyramids.as_ref() {
-                    if h.contains(&msg.sender.name) && *emote_count == 3 && rand::random::<f32>() < 0.5 {
-                        warn!("Taking it hard");
-                        // self.say_rate_limited(&msg.channel_login, "No".to_string()).await;
-                        *pyramid_building = false;
-                    }
+                if let Some(h) = config.harder_pyramids.as_ref()
+                    && h.contains(&msg.sender.name)
+                    && *emote_count == 3
+                    && rand::random::<f32>() < 0.5
+                {
+                    warn!("Taking it hard");
+                    // self.say_rate_limited(&msg.channel_login, "No".to_string()).await;
+                    *pyramid_building = false;
                 }
             }
             i if i == *emote_count - 1 => {
@@ -213,11 +215,12 @@ impl ChatLoop {
                 }
                 *pyramid_building = false;
 
-                if let Some(h) = config.easier_pyramids.as_ref() {
-                    if h.contains(&msg.sender.name) && rand::random::<f32>() < 0.5 {
-                        warn!("Taking it easy");
-                        return;
-                    }
+                if let Some(h) = config.easier_pyramids.as_ref()
+                    && h.contains(&msg.sender.name)
+                    && rand::random::<f32>() < 0.5
+                {
+                    warn!("Taking it easy");
+                    return;
                 }
 
                 warn!("Time to strike");
