@@ -409,14 +409,20 @@ impl EventLoop {
         }
     }
 }
+
 async fn send_notification(ntfy: &Option<Ntfy>, msg: String, login: Option<&str>) {
     if let Some(nt) = ntfy.clone() {
-        let address = login.map(|log| format!("https://www.twitch.tv/{log}"));
+        let login = login.map(|l| l.to_string());
         tokio::spawn(async move {
             let cl = Client::new();
-            let mut req = cl.post(nt.address).basic_auth(nt.user, Some(nt.pass)).body(msg);
-            if let Some(adr) = address {
-                req = req.header("Click", adr);
+            let mut req = cl
+                .post(nt.address)
+                .basic_auth(nt.user, Some(nt.pass))
+                .header("Icon", "https://upload.wikimedia.org/wikipedia/commons/1/19/Twitch.jpg")
+                .body(msg);
+            if let Some(l) = login {
+                let address = format!("https://www.twitch.tv/{l}");
+                req = req.header("Click", &address).header("Title", &l);
             }
             if let Err(e) = req.send().await {
                 error!("Error sending notification to ntfy: {}", e);
