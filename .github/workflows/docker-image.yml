@@ -41,5 +41,6 @@ jobs:
           key: ${{ secrets.SSH_PRIV_KEY }}
           port: ${{ secrets.PORT }}
           script: |
+            docker image tag bot:latest bot:$(date +%s)
             cd Projects/twitch_bot
             docker compose up -d
