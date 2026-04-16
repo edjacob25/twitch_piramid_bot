@@ -1,4 +1,4 @@
-FROM docker.io/library/rust:alpine as builder
+FROM docker.io/library/rust:alpine AS builder
 WORKDIR /usr/src/myapp
 RUN apk add --no-cache musl-dev
 COPY . .
